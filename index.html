@@ -784,6 +784,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 }
 
 </style>
+<!-- v18: conectado a Cloudflare Worker para resultados automáticos -->
 </head>
 <body>
 <main class="page">
@@ -3480,7 +3481,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
   </section>
 
   <footer>Canales agrupados: DAZN y RTVE / DAZN. En móvil se oculta el grupo para mejorar la lectura.
-<div class="footer-sources">Base v17: fase de grupos desde el CSV auditado; eliminatorias mostradas con equipos/resultados pendientes hasta confirmación.</div></footer>
+<div class="footer-sources">Base v18: resultados consultados automáticamente mediante Cloudflare Worker; clasificación y estados se recalculan con los marcadores disponibles.</div></footer>
 </main>
 
 <script>
@@ -3554,7 +3555,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <script>
-const RESULTS_API_URL='https://worldcup26.ir/get/games';
+const RESULTS_API_URL = 'https://mundial-results.santiago-freire.workers.dev/';
 const RESULTS_REFRESH_MS=60000;
 
 const TEAM_ALIASES={
@@ -3603,7 +3604,7 @@ async function updateResults(){
    setScore(key,`${s1} - ${s2}`,m.st,m.min); updated++;
   });
   if(box){box.textContent=updated?`Resultados actualizados: ${updated} partido${updated===1?'':'s'}`:'No hay resultados disponibles todavía.';setTimeout(()=>box.style.display='none',5000)}
- }catch(e){if(box){box.textContent='No se pudieron consultar los resultados ahora.';setTimeout(()=>box.style.display='none',6000)}console.warn(e)}
+ }catch(e){if(box){box.textContent='Resultados no disponibles todavía.';setTimeout(()=>box.style.display='none',6000)}console.warn(e)}
 }
 document.addEventListener('DOMContentLoaded',()=>{updateResults();setInterval(updateResults,RESULTS_REFRESH_MS)})
 </script>
