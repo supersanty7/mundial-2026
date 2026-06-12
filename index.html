@@ -786,11 +786,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 </style>
 
 
-<!-- v18.4: clasificación corregida; solo cuenta partidos en juego/finalizados -->
-<!-- Cloudflare Web Analytics -->
-<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "1674597aaf6b43dd83821f5b3c535d00"}'></script>
-<!-- End Cloudflare Web Analytics -->
 
+<!-- v18.6: UI limpia sin leyendas y barra de estado corregida -->
 </head>
 <body>
 <main class="page">
@@ -884,7 +881,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
     <button id="clearFilters" type="button">Limpiar</button>
   </section>
   <div class="results-info" id="resultsInfo"></div>
-  <div class="results-status" id="resultsStatus"></div>
+  <div class="results-status" id="resultsStatus" aria-live="polite"></div>
 
   <section class="view-tabs" aria-label="Vistas">
     <button class="view-tab active" id="matchesTab" type="button">📅 Partidos</button>
@@ -3485,6 +3482,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
     <div class="standings-note">La clasificación se calcula con los resultados disponibles en las tarjetas. Criterios: puntos, diferencia de goles, goles a favor y nombre.</div>
   </section>
 
+  <footer style="display:none"></footer>
 </main>
 
 <script>
@@ -3699,7 +3697,7 @@ async function updateResults(){
   if(box){
     if(updated){
       box.style.display='block';
-      box.textContent=`'':'s'}`;
+      box.textContent=`''`;
       setTimeout(()=>box.style.display='none',4000);
     } else {
       box.style.display='none';
