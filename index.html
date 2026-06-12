@@ -832,6 +832,16 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
   }
 }
 
+
+/* v18.8: ocultar barra de estado residual */
+.results-status {
+  display: none !important;
+  height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+}
+
 </style>
 
 
@@ -840,7 +850,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 <!-- Cloudflare Web Analytics -->
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"1674597aaf6b43dd83821f5b3c535d00"}'></script>
 <!-- End Cloudflare Web Analytics -->
-<!-- v18.7: fix solapes móvil + analytics -->
+
+<!-- v18.8: barra de estado oculta definitivamente -->
 </head>
 <body>
 <main class="page">
@@ -934,7 +945,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
     <button id="clearFilters" type="button">Limpiar</button>
   </section>
   <div class="results-info" id="resultsInfo"></div>
-  <div class="results-status" id="resultsStatus" aria-live="polite"></div>
+  <div class="results-status" id="resultsStatus" aria-live="polite" style="display:none!important"></div>
 
   <section class="view-tabs" aria-label="Vistas">
     <button class="view-tab active" id="matchesTab" type="button">📅 Partidos</button>
@@ -3749,8 +3760,8 @@ async function updateResults(){
 
   if(box){
     if(updated){
-      box.style.display='block';
-      box.textContent=`''`;
+      box.style.display='none';
+      box.textContent='';
       setTimeout(()=>box.style.display='none',4000);
     } else {
       box.style.display='none';
@@ -3760,8 +3771,8 @@ async function updateResults(){
   console.info('[Mundial 2026] Resultados procesados:', updated);
  }catch(e){
   if(box){
-    box.style.display='block';
-    box.textContent='Resultados no disponibles todavía.';
+    box.style.display='none';
+    box.textContent='';
     setTimeout(()=>box.style.display='none',6000);
   }
   console.warn('[Mundial 2026] Error consultando resultados:',e);
