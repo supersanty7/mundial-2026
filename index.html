@@ -785,7 +785,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 </style>
 
-<!-- v18.3: Worker + resultados robustos sin bloqueo por fecha local -->
+
+<!-- v18.4: clasificación corregida; solo cuenta partidos en juego/finalizados -->
 </head>
 <body>
 <main class="page">
@@ -3652,12 +3653,22 @@ min:pick(m.time_elapsed,m.elapsed,m.minute,m.time,m.fixture?.status?.elapsed)
 }}
 function findMatch(apiMatches,t1,t2){for(const raw of apiMatches){const m=norm(raw);if(!m.h||!m.a)continue;const direct=teamMatches(m.h,t1)&&teamMatches(m.a,t2);const rev=teamMatches(m.h,t2)&&teamMatches(m.a,t1);if(direct||rev)return{...m,rev}}return null}
 function due(){const now=new Date();return [...document.querySelectorAll('.match')].some(c=>{const k=new Date(c.dataset.kickoff);return !isNaN(k)&&now>=k})}
+
+function clearAutomaticScores() {
+  document.querySelectorAll('.match.has-score').forEach(card => {
+    card.classList.remove('has-score', 'live-match', 'finished-match');
+    const score = card.querySelector('.scoreline');
+    if (score) score.textContent = '';
+  });
+}
+
 function setScore(key,txt,st,min){document.querySelectorAll(`.match[data-result-key="${CSS.escape(key)}"]`).forEach(c=>{const s=c.querySelector('.scoreline');if(!s)return;c.classList.add('has-score');c.classList.toggle('live-match',st==='live');c.classList.toggle('finished-match',st==='finished');s.textContent=txt+(st==='live'&&min?` · ${min}'`:'')})}
 async function updateResults(){
  if(resultsFetchInProgress)return;
  resultsFetchInProgress = true;
  const box=document.getElementById('resultsStatus');
  try{
+  clearAutomaticScores();
   const res=await fetch(RESULTS_API_URL,{cache:'no-store'});
   if(!res.ok)throw new Error(res.status);
   const api=arr(await res.json());
@@ -3671,6 +3682,8 @@ async function updateResults(){
 
    const m=findMatch(api,card.dataset.team1,card.dataset.team2);
    if(!m)return;
+
+   if(m.st !== 'live' && m.st !== 'finished') return;
 
    const s1=m.rev?m.as:m.hs;
    const s2=m.rev?m.hs:m.as;
