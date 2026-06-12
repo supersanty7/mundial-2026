@@ -787,15 +787,12 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 
 <!-- v18.4: clasificación corregida; solo cuenta partidos en juego/finalizados -->
-<!-- Cloudflare Web Analytics -->
-<script defer src="https://static.cloudflareinsights.com/beacon.min.js"
- data-cf-beacon='{"token":"1674597aaf6b43dd83821f5b3c535d00"}'></script>
 </head>
 <body>
 <main class="page">
   <header>
     <h1>Mundial FIFA 2026</h1>
-    <div class="subtitle">Calendario completo · Horarios en Madrid (CEST) · Canales en España</div>
+    <div class="subtitle">Horarios en Madrid (CEST)</div>
     <div class="legend"><span>España destacado</span><span>DAZN: todos</span><span>RTVE / DAZN: abierto + DAZN</span></div>
   </header>
 
@@ -3701,7 +3698,7 @@ async function updateResults(){
   if(box){
     if(updated){
       box.style.display='block';
-      box.textContent=`Resultados actualizados automáticamente: ${updated} partido${updated===1?'':'s'}`;
+      box.textContent=`'':'s'}`;
       setTimeout(()=>box.style.display='none',4000);
     } else {
       box.style.display='none';
