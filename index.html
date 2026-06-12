@@ -784,7 +784,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 }
 
 </style>
-<!-- v18.1: conectado a Cloudflare Worker; llamadas duplicadas eliminadas -->
+<!-- v18.2: Worker + mapeo API inglés/español para resultados -->
 </head>
 <body>
 <main class="page">
@@ -3559,6 +3559,68 @@ const RESULTS_API_URL = 'https://mundial-results.santiago-freire.workers.dev/';
 const RESULTS_REFRESH_MS=60000;
 let resultsFetchInProgress = false;
 
+
+const API_NAME_TO_LOCAL_TEAM = {
+  'Mexico': 'México',
+  'South Africa': 'Sudáfrica',
+  'South Korea': 'Corea del Sur',
+  'Czech Republic': 'República Checa',
+  'Canada': 'Canadá',
+  'Bosnia and Herzegovina': 'Bosnia y Herzegovina',
+  'United States': 'Estados Unidos',
+  'USA': 'Estados Unidos',
+  'Paraguay': 'Paraguay',
+  'Qatar': 'Qatar',
+  'Switzerland': 'Suiza',
+  'Brazil': 'Brasil',
+  'Morocco': 'Marruecos',
+  'Haiti': 'Haití',
+  'Scotland': 'Escocia',
+  'Australia': 'Australia',
+  'Türkiye': 'Turquía',
+  'Turkey': 'Turquía',
+  'Germany': 'Alemania',
+  'Curaçao': 'Curazao',
+  'Curacao': 'Curazao',
+  'Netherlands': 'Países Bajos',
+  'Japan': 'Japón',
+  "Côte d'Ivoire": 'Costa de Marfil',
+  'Ivory Coast': 'Costa de Marfil',
+  'Ecuador': 'Ecuador',
+  'Sweden': 'Suecia',
+  'Tunisia': 'Túnez',
+  'Spain': 'España',
+  'Cape Verde': 'Cabo Verde',
+  'Belgium': 'Bélgica',
+  'Egypt': 'Egipto',
+  'Saudi Arabia': 'Arabia Saudí',
+  'Uruguay': 'Uruguay',
+  'Iran': 'Irán',
+  'IR Iran': 'Irán',
+  'New Zealand': 'Nueva Zelanda',
+  'France': 'Francia',
+  'Senegal': 'Senegal',
+  'Iraq': 'Irak',
+  'Norway': 'Noruega',
+  'Argentina': 'Argentina',
+  'Algeria': 'Argelia',
+  'Austria': 'Austria',
+  'Jordan': 'Jordania',
+  'Portugal': 'Portugal',
+  'DR Congo': 'RD Congo',
+  'Congo DR': 'RD Congo',
+  'England': 'Inglaterra',
+  'Croatia': 'Croacia',
+  'Ghana': 'Ghana',
+  'Panama': 'Panamá',
+  'Uzbekistan': 'Uzbekistán',
+  'Colombia': 'Colombia'
+};
+
+function apiNameToLocal(name) {
+  return API_NAME_TO_LOCAL_TEAM[name] || name;
+}
+
 const TEAM_ALIASES={
 'México':['mexico','mexico','mex'],'Sudáfrica':['south africa','sudafrica'],'Corea del Sur':['south korea','corea del sur','korea republic'],
 'República Checa':['czech republic','czechia','republica checa'],'Canadá':['canada'],'Bosnia y Herzegovina':['bosnia and herzegovina','bosnia y herzegovina','bosnia'],
@@ -3575,17 +3637,17 @@ const TEAM_ALIASES={
 };
 
 function clean(v){return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()}
-function teamMatches(api,local){const a=clean(api);return (TEAM_ALIASES[local]||[local]).some(x=>a===clean(x)||a.includes(clean(x))||clean(x).includes(a))}
+function teamMatches(api,local){const localApi=apiNameToLocal(api);const a=clean(localApi);return a===clean(local)||(TEAM_ALIASES[local]||[local]).some(x=>a===clean(x)||a.includes(clean(x))||clean(x).includes(a))}
 function arr(payload){if(Array.isArray(payload))return payload;if(!payload||typeof payload!=='object')return[];for(const k of ['games','matches','data','results','fixtures'])if(Array.isArray(payload[k]))return payload[k];return[]}
 function pick(...v){return v.find(x=>x!==undefined&&x!==null&&x!=='')}
 function status(s){s=clean(s);if(['live','in play','playing','first half','second half','halftime','1h','2h'].some(x=>s.includes(x)))return'live';if(['finished','full time','fulltime','ft','ended','complete','completed'].some(x=>s.includes(x)))return'finished';return'scheduled'}
 function norm(m){return{
-h:pick(m.home_team,m.homeTeam,m.team1,m.home,m.home_name,m.homeTeamName,m.home?.name,m.homeTeam?.name,m.teams?.home?.name),
-a:pick(m.away_team,m.awayTeam,m.team2,m.away,m.away_name,m.awayTeamName,m.away?.name,m.awayTeam?.name,m.teams?.away?.name),
+h:apiNameToLocal(pick(m.home_team_name_en,m.home_team,m.homeTeam,m.team1,m.home,m.home_name,m.homeTeamName,m.home?.name,m.homeTeam?.name,m.teams?.home?.name)),
+a:apiNameToLocal(pick(m.away_team_name_en,m.away_team,m.awayTeam,m.team2,m.away,m.away_name,m.awayTeamName,m.away?.name,m.awayTeam?.name,m.teams?.away?.name)),
 hs:pick(m.home_score,m.homeScore,m.score1,m.home_goals,m.goals_home,m.home?.score,m.homeTeam?.score,m.goals?.home,m.score?.home,m.score?.fullTime?.home),
 as:pick(m.away_score,m.awayScore,m.score2,m.away_goals,m.goals_away,m.away?.score,m.awayTeam?.score,m.goals?.away,m.score?.away,m.score?.fullTime?.away),
-st:status(pick(m.status,m.match_status,m.state,m.fixture?.status?.long,m.fixture?.status?.short)),
-min:pick(m.elapsed,m.minute,m.time,m.fixture?.status?.elapsed)
+st:(String(m.finished).toUpperCase()==='TRUE'||String(m.time_elapsed).toLowerCase()==='finished')?'finished':status(pick(m.time_elapsed,m.status,m.match_status,m.state,m.fixture?.status?.long,m.fixture?.status?.short)),
+min:pick(m.time_elapsed,m.elapsed,m.minute,m.time,m.fixture?.status?.elapsed)
 }}
 function findMatch(apiMatches,t1,t2){for(const raw of apiMatches){const m=norm(raw);if(!m.h||!m.a)continue;const direct=teamMatches(m.h,t1)&&teamMatches(m.a,t2);const rev=teamMatches(m.h,t2)&&teamMatches(m.a,t1);if(direct||rev)return{...m,rev}}return null}
 function due(){const now=new Date();return [...document.querySelectorAll('.match')].some(c=>{const k=new Date(c.dataset.kickoff);return !isNaN(k)&&now>=k})}
@@ -3604,13 +3666,13 @@ async function updateResults(){
    const m=findMatch(api,card.dataset.team1,card.dataset.team2); if(!m)return;
    const s1=m.rev?m.as:m.hs, s2=m.rev?m.hs:m.as;
    if(s1===undefined||s2===undefined||s1===null||s2===null||s1===''||s2==='')return;
-   setScore(key,`${s1} - ${s2}`,m.st,m.min); updated++;
+   setScore(key,`${s1} - ${s2}`,m.st,m.min); updated++; if(typeof renderStandings==='function'){renderStandings();}
   });
-  if(box){box.textContent=updated?`Resultados actualizados: ${updated} partido${updated===1?'':'s'}`:'No hay resultados disponibles todavía.';setTimeout(()=>box.style.display='none',5000)}
+  if(box){box.textContent=updated?`Resultados actualizados automáticamente: ${updated} partido${updated===1?'':'s'}`:'No hay resultados disponibles todavía.';setTimeout(()=>box.style.display='none',5000)}
  }catch(e){if(box){box.textContent='Resultados no disponibles todavía.';setTimeout(()=>box.style.display='none',6000)}console.warn(e)}
  finally { resultsFetchInProgress = false; }
 }
-
+document.addEventListener('DOMContentLoaded',()=>{updateResults();})
 </script>
 
 
@@ -3933,7 +3995,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 <script>
-/* v18.1: inicializador único de resultados */
+/* v18.2: inicializador único de resultados */
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof updateResults === 'function') {
     updateResults();
