@@ -784,7 +784,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 }
 
 </style>
-<!-- v18.2: Worker + mapeo API inglés/español para resultados -->
+
+<!-- v18.3: Worker + resultados robustos sin bloqueo por fecha local -->
 </head>
 <body>
 <main class="page">
@@ -3654,25 +3655,55 @@ function due(){const now=new Date();return [...document.querySelectorAll('.match
 function setScore(key,txt,st,min){document.querySelectorAll(`.match[data-result-key="${CSS.escape(key)}"]`).forEach(c=>{const s=c.querySelector('.scoreline');if(!s)return;c.classList.add('has-score');c.classList.toggle('live-match',st==='live');c.classList.toggle('finished-match',st==='finished');s.textContent=txt+(st==='live'&&min?` · ${min}'`:'')})}
 async function updateResults(){
  if(resultsFetchInProgress)return;
- if(!due())return;
  resultsFetchInProgress = true;
- const box=document.getElementById('resultsStatus'); if(box){box.style.display='block';box.textContent='Consultando resultados...'}
+ const box=document.getElementById('resultsStatus');
  try{
-  const res=await fetch(RESULTS_API_URL,{cache:'no-store'}); if(!res.ok)throw new Error(res.status);
-  const api=arr(await res.json()); const done=new Set(); let updated=0;
+  const res=await fetch(RESULTS_API_URL,{cache:'no-store'});
+  if(!res.ok)throw new Error(res.status);
+  const api=arr(await res.json());
+  const done=new Set();
+  let updated=0;
+
   document.querySelectorAll('.match').forEach(card=>{
-   const ko=new Date(card.dataset.kickoff); if(isNaN(ko)||new Date()<ko)return;
-   const key=card.dataset.resultKey; if(done.has(key))return; done.add(key);
-   const m=findMatch(api,card.dataset.team1,card.dataset.team2); if(!m)return;
-   const s1=m.rev?m.as:m.hs, s2=m.rev?m.hs:m.as;
-   if(s1===undefined||s2===undefined||s1===null||s2===null||s1===''||s2==='')return;
-   setScore(key,`${s1} - ${s2}`,m.st,m.min); updated++; if(typeof renderStandings==='function'){renderStandings();}
+   const key=card.dataset.resultKey;
+   if(!key || done.has(key))return;
+   done.add(key);
+
+   const m=findMatch(api,card.dataset.team1,card.dataset.team2);
+   if(!m)return;
+
+   const s1=m.rev?m.as:m.hs;
+   const s2=m.rev?m.hs:m.as;
+   if(s1===undefined||s2===undefined||s1===null||s2===null||s1===''||s2===''||s1==='null'||s2==='null')return;
+
+   setScore(key,`${s1} - ${s2}`,m.st,m.min);
+   updated++;
   });
-  if(box){box.textContent=updated?`Resultados actualizados automáticamente: ${updated} partido${updated===1?'':'s'}`:'No hay resultados disponibles todavía.';setTimeout(()=>box.style.display='none',5000)}
- }catch(e){if(box){box.textContent='Resultados no disponibles todavía.';setTimeout(()=>box.style.display='none',6000)}console.warn(e)}
+
+  if(typeof renderStandings==='function'){renderStandings();}
+
+  if(box){
+    if(updated){
+      box.style.display='block';
+      box.textContent=`Resultados actualizados automáticamente: ${updated} partido${updated===1?'':'s'}`;
+      setTimeout(()=>box.style.display='none',4000);
+    } else {
+      box.style.display='none';
+    }
+  }
+
+  console.info('[Mundial 2026] Resultados procesados:', updated);
+ }catch(e){
+  if(box){
+    box.style.display='block';
+    box.textContent='Resultados no disponibles todavía.';
+    setTimeout(()=>box.style.display='none',6000);
+  }
+  console.warn('[Mundial 2026] Error consultando resultados:',e);
+ }
  finally { resultsFetchInProgress = false; }
 }
-document.addEventListener('DOMContentLoaded',()=>{updateResults();})
+
 </script>
 
 
@@ -3994,8 +4025,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+
+
+
 <script>
-/* v18.2: inicializador único de resultados */
+/* v18.3: inicializador único de resultados */
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof updateResults === 'function') {
     updateResults();
