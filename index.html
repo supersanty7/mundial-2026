@@ -1093,7 +1093,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 
 
-<!-- v21.3: corrección estado live en resultados y modal -->
+
+<!-- v21.4: limpia live del marcador y mantiene estado en juego -->
 </head>
 <body>
 <main class="page">
@@ -3972,6 +3973,14 @@ function clearAutomaticScores() {
   });
 }
 
+
+function safeDisplayMinute(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw || raw === 'live' || raw === 'finished' || raw === 'notstarted' || raw === 'not started') return '';
+  if (/^\d+(\+\d+)?$/.test(raw)) return raw;
+  return '';
+}
+
 function setScore(key,txt,st,min){document.querySelectorAll(`.match[data-result-key="${CSS.escape(key)}"]`).forEach(c=>{const s=c.querySelector('.scoreline');if(!s)return;c.classList.add('has-score');c.classList.toggle('live-match',st==='live');c.classList.toggle('finished-match',st==='finished');s.textContent=txt+(st==='live'&&min?` · ${min}'`:'')})}
 
 const RESULTS_CACHE_KEY = 'mundial2026_results_cache_v1';
@@ -4013,7 +4022,7 @@ function applyIndexedResults(resultMap, sourceLabel = '') {
       s1 === 'null' || s2 === 'null'
     ) return;
 
-    setScore(card.dataset.resultKey, `${s1} - ${s2}`, m.st, m.min);
+    setScore(card.dataset.resultKey, `${s1} - ${s2}`, m.st, safeDisplayMinute(m.min));
     updated++;
   });
 
@@ -4551,11 +4560,28 @@ function renderScoreboardTeam(team, flag, logoUrl) {
   `;
 }
 
+
+function cleanScoreText(value) {
+  let text = String(value || '').trim();
+
+  text = text
+    .replace(/^FINAL\s*/i, '')
+    .replace(/^EN JUEGO\s*/i, '')
+    .replace(/\s*·\s*live'?/ig, '')
+    .replace(/\s+live'?/ig, '')
+    .replace(/\s*·\s*finished'?/ig, '')
+    .replace(/\s+finished'?/ig, '')
+    .replace(/\s*·\s*notstarted'?/ig, '')
+    .replace(/\s+notstarted'?/ig, '')
+    .trim();
+
+  return text || 'vs';
+}
+
 function getScoreboardState(card, apiMatch = null) {
   const scoreVisible = card.querySelector('.scoreline')?.textContent?.trim();
 
-  let result = scoreVisible || 'vs';
-  result = result.replace(/^FINAL\s*/i, '').replace(/^EN JUEGO\s*/i, '').trim();
+  let result = cleanScoreText(scoreVisible);
 
   const elapsed = String(apiMatch?.min || apiMatch?.time_elapsed || '')
     .trim()
