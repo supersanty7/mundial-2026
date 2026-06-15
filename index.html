@@ -1052,7 +1052,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 
 
-<!-- v20.1: detalle de partido con goleadores corregidos -->
+
+<!-- v20.2: detalle sin tarjeta final y goles con banderas -->
 </head>
 <body>
 <main class="page">
@@ -4452,6 +4453,18 @@ function renderDetailItem(label, value) {
   `;
 }
 
+
+function getTeamFlagFromCard(card, teamName) {
+  const teams = Array.from(card.querySelectorAll('.team'));
+  for (const teamEl of teams) {
+    const name = teamEl.querySelector('b')?.textContent?.trim();
+    if (name === teamName) {
+      return teamEl.querySelector('.flag')?.textContent?.trim() || '';
+    }
+  }
+  return '';
+}
+
 function renderScorers(title, scorers) {
   const content = scorers.length
     ? `<div class="scorer-list">${scorers.map(s => `<div class="scorer-item"><span class="scorer-ball">⚽</span><span>${s}</span></div>`).join('')}</div>`
@@ -4474,6 +4487,8 @@ function openMatchDetail(card) {
 
   const team1 = card.dataset.team1 || '';
   const team2 = card.dataset.team2 || '';
+  const team1Flag = getTeamFlagFromCard(card, team1);
+  const team2Flag = getTeamFlagFromCard(card, team2);
   const apiMatch = findApiMatchForCard(card);
 
   const scoreVisible = card.querySelector('.scoreline')?.textContent?.trim();
@@ -4508,15 +4523,8 @@ function openMatchDetail(card) {
       </div>
     </section>
 
-    ${renderScorers(`Goles · ${team1}`, homeScorers)}
-    ${renderScorers(`Goles · ${team2}`, awayScorers)}
-
-    <section class="detail-section">
-      <div class="detail-section-title">Datos disponibles</div>
-      <div class="detail-section-content detail-empty">
-        Esta ficha usa los datos gratuitos disponibles actualmente: marcador, estado, goleadores, minuto, grupo/fase, canal y estadio si la API lo proporciona.
-      </div>
-    </section>
+    ${renderScorers(`Goles · ${team1Flag} ${team1}`.trim(), homeScorers)}
+    ${renderScorers(`Goles · ${team2Flag} ${team2}`.trim(), awayScorers)}
   `;
 
   overlay.classList.add('active');
