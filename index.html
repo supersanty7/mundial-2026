@@ -1039,6 +1039,17 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
   }
 }
 
+
+/* v21: escudos en detalle de partido */
+.match-detail-teams-visual{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;margin:12px 0 10px}
+.detail-team-badge{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.detail-team-badge:first-child{align-items:flex-end}.detail-team-badge:last-child{align-items:flex-start}
+.detail-team-logo{width:54px;height:54px;object-fit:contain;border-radius:12px;background:rgba(255,255,255,.16);padding:6px}
+.detail-team-logo.logo-placeholder{display:inline-flex;align-items:center;justify-content:center;font-size:28px}
+.detail-team-name{font-size:12px;font-weight:900;max-width:145px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detail-vs-big{font-weight:950;opacity:.8}
+@media(max-width:760px){.detail-team-logo{width:46px;height:46px}.detail-team-name{max-width:110px;font-size:11px}}
+
 </style>
 
 
@@ -1053,7 +1064,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 
 
-<!-- v20.2: detalle sin tarjeta final y goles con banderas -->
+
+<!-- v21: escudos en detalle de partido -->
 </head>
 <body>
 <main class="page">
@@ -4362,6 +4374,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="match-detail-header">
       <button class="match-detail-close" id="matchDetailClose" type="button" aria-label="Cerrar">×</button>
       <h2 class="match-detail-title" id="matchDetailTitle">Detalle del partido</h2>
+      <div class="match-detail-teams-visual" id="matchDetailTeamsVisual"></div>
       <div class="match-detail-score" id="matchDetailScore">Pendiente</div>
     </div>
     <div class="match-detail-body" id="matchDetailBody"></div>
@@ -4478,6 +4491,18 @@ function renderScorers(title, scorers) {
   `;
 }
 
+
+/* v21: escudos de selecciones en el detalle */
+const TEAM_LOGO_CACHE_KEY='mundial2026_team_logos_v1';
+function getTeamLogoCache(){try{return JSON.parse(localStorage.getItem(TEAM_LOGO_CACHE_KEY)||'{}')}catch{return {}}}
+function saveTeamLogoCache(cache){try{localStorage.setItem(TEAM_LOGO_CACHE_KEY,JSON.stringify(cache))}catch{}}
+function teamNameForLogoApi(localName){const map={'México':'Mexico','Sudáfrica':'South Africa','Corea del Sur':'South Korea','República Checa':'Czech Republic','Canadá':'Canada','Bosnia y Herzegovina':'Bosnia and Herzegovina','Estados Unidos':'United States','Suiza':'Switzerland','Brasil':'Brazil','Marruecos':'Morocco','Haití':'Haiti','Escocia':'Scotland','Turquía':'Turkey','Alemania':'Germany','Curazao':'Curacao','Países Bajos':'Netherlands','Japón':'Japan','Costa de Marfil':'Ivory Coast','Suecia':'Sweden','Túnez':'Tunisia','España':'Spain','Cabo Verde':'Cape Verde','Bélgica':'Belgium','Egipto':'Egypt','Arabia Saudí':'Saudi Arabia','Irán':'Iran','Nueva Zelanda':'New Zealand','Francia':'France','Irak':'Iraq','Noruega':'Norway','Argelia':'Algeria','Austria':'Austria','Jordania':'Jordan','RD Congo':'DR Congo','Inglaterra':'England','Croacia':'Croatia','Panamá':'Panama','Uzbekistán':'Uzbekistan'};return map[localName]||localName}
+function getTeamFlagForDetail(card,teamName){if(typeof getTeamFlagFromCard==='function')return getTeamFlagFromCard(card,teamName);for(const teamEl of Array.from(card.querySelectorAll('.team'))){const name=teamEl.querySelector('b')?.textContent?.trim();if(name===teamName)return teamEl.querySelector('.flag')?.textContent?.trim()||'🏳️'}return '🏳️'}
+function renderTeamLogoSlot(team,flag,logoUrl){const visual=logoUrl?`<img class="detail-team-logo" src="${logoUrl}" alt="Escudo ${team}" loading="lazy">`:`<span class="detail-team-logo logo-placeholder" aria-label="Bandera ${team}">${flag||'🏳️'}</span>`;return `<div class="detail-team-badge">${visual}<div class="detail-team-name">${team}</div></div>`}
+function renderMatchDetailLogos(card,team1,team2,logo1='',logo2=''){const box=document.getElementById('matchDetailTeamsVisual');if(!box)return;const flag1=getTeamFlagForDetail(card,team1);const flag2=getTeamFlagForDetail(card,team2);box.innerHTML=`${renderTeamLogoSlot(team1,flag1,logo1)}<div class="detail-vs-big">VS</div>${renderTeamLogoSlot(team2,flag2,logo2)}`}
+async function fetchTeamLogo(teamName){const cache=getTeamLogoCache();if(cache[teamName])return cache[teamName];const apiName=teamNameForLogoApi(teamName);const base=RESULTS_API_URL.endsWith('/')?RESULTS_API_URL:RESULTS_API_URL+'/';const url=`${base}api-football/team-logo?team=${encodeURIComponent(apiName)}`;const res=await fetch(url,{cache:'default'});if(!res.ok)return '';const data=await res.json();const logo=data?.logo||'';if(logo){cache[teamName]=logo;saveTeamLogoCache(cache)}return logo}
+async function hydrateMatchDetailLogos(card,team1,team2){renderMatchDetailLogos(card,team1,team2);try{const [logo1,logo2]=await Promise.all([fetchTeamLogo(team1),fetchTeamLogo(team2)]);renderMatchDetailLogos(card,team1,team2,logo1,logo2)}catch(e){console.warn('[Mundial 2026] No se pudieron cargar escudos:',e)}}
+
 function openMatchDetail(card) {
   const overlay = document.getElementById('matchDetailOverlay');
   const title = document.getElementById('matchDetailTitle');
@@ -4490,6 +4515,8 @@ function openMatchDetail(card) {
   const team1Flag = getTeamFlagFromCard(card, team1);
   const team2Flag = getTeamFlagFromCard(card, team2);
   const apiMatch = findApiMatchForCard(card);
+
+  hydrateMatchDetailLogos(card, team1, team2);
 
   const scoreVisible = card.querySelector('.scoreline')?.textContent?.trim();
   const isLive = card.classList.contains('live-match');
