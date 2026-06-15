@@ -1068,6 +1068,13 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 .match-detail-teams-visual{display:none!important}
 @media(max-width:760px){.scoreboard-teams{gap:6px}.scoreboard-logo{width:56px;height:56px;border-radius:16px}.scoreboard-logo.logo-placeholder{font-size:32px}.scoreboard-team-name{font-size:12px}.scoreboard-center{min-width:78px}.scoreboard-result{font-size:40px}.scoreboard-status{font-size:11px}}
 
+
+/* v21.2: cabecera modal con fecha/fase y estado limpio */
+.match-detail-title{font-size:15px!important;line-height:1.25!important;font-weight:900!important;margin-right:48px!important;color:rgba(255,255,255,.9)!important;letter-spacing:.01em}
+.match-detail-title .detail-meta-main{display:block;font-size:16px;font-weight:950}
+.match-detail-title .detail-meta-sub{display:block;margin-top:3px;font-size:12px;font-weight:800;opacity:.82}
+.scoreboard-status{min-width:0}
+
 </style>
 
 
@@ -1084,7 +1091,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 
 
-<!-- v21.1: marcador integrado en detalle -->
+
+<!-- v21.2: modal con meta arriba y estado limpio -->
 </head>
 <body>
 <main class="page">
@@ -4520,7 +4528,7 @@ function getTeamFlagForDetail(card,teamName){if(typeof getTeamFlagFromCard==='fu
 function renderTeamLogoSlot(team,flag,logoUrl){const visual=logoUrl?`<img class="detail-team-logo" src="${logoUrl}" alt="Escudo ${team}" loading="lazy">`:`<span class="detail-team-logo logo-placeholder" aria-label="Bandera ${team}">${flag||'🏳️'}</span>`;return `<div class="detail-team-badge">${visual}<div class="detail-team-name">${team}</div></div>`}
 function renderMatchDetailLogos(card,team1,team2,logo1='',logo2=''){const box=document.getElementById('matchDetailTeamsVisual');if(!box)return;const flag1=getTeamFlagForDetail(card,team1);const flag2=getTeamFlagForDetail(card,team2);box.innerHTML=`${renderTeamLogoSlot(team1,flag1,logo1)}<div class="detail-vs-big">VS</div>${renderTeamLogoSlot(team2,flag2,logo2)}`}
 async function fetchTeamLogo(teamName){const cache=getTeamLogoCache();if(cache[teamName])return cache[teamName];const apiName=teamNameForLogoApi(teamName);const base=RESULTS_API_URL.endsWith('/')?RESULTS_API_URL:RESULTS_API_URL+'/';const url=`${base}api-football/team-logo?team=${encodeURIComponent(apiName)}`;const res=await fetch(url,{cache:'default'});if(!res.ok)return '';const data=await res.json();const logo=data?.logo||'';if(logo){cache[teamName]=logo;saveTeamLogoCache(cache)}return logo}
-async function hydrateMatchDetailLogos(card,team1,team2){renderMatchScoreboard(card,team1,team2);try{const [logo1,logo2]=await Promise.all([fetchTeamLogo(team1),fetchTeamLogo(team2)]);renderMatchScoreboard(card,team1,team2,logo1,logo2)}catch(e){console.warn('[Mundial 2026] No se pudieron cargar escudos:',e)}}
+async function hydrateMatchDetailLogos(card,team1,team2,apiMatch=null){renderMatchScoreboard(card,team1,team2,'','',apiMatch);try{const [logo1,logo2]=await Promise.all([fetchTeamLogo(team1),fetchTeamLogo(team2)]);renderMatchScoreboard(card,team1,team2,logo1,logo2,apiMatch)}catch(e){console.warn('[Mundial 2026] No se pudieron cargar escudos:',e)}}
 
 
 /* v21.1: marcador visual integrado */
@@ -4537,7 +4545,7 @@ function renderScoreboardTeam(team, flag, logoUrl) {
   `;
 }
 
-function getScoreboardState(card) {
+function getScoreboardState(card, apiMatch = null) {
   const scoreVisible = card.querySelector('.scoreline')?.textContent?.trim();
   const isLive = card.classList.contains('live-match');
   const isFinished = card.classList.contains('finished-match');
@@ -4545,19 +4553,28 @@ function getScoreboardState(card) {
   let result = scoreVisible || 'vs';
   result = result.replace(/^FINAL\s*/i, '').replace(/^EN JUEGO\s*/i, '').trim();
 
-  const status = isLive ? 'EN JUEGO' : isFinished ? 'FINAL' : 'PENDIENTE';
-  const statusClass = isLive ? 'live' : isFinished ? 'finished' : 'pending';
+  let status = 'PENDIENTE';
+  let statusClass = 'pending';
+
+  if (isFinished) {
+    status = 'FINAL';
+    statusClass = 'finished';
+  } else if (isLive) {
+    const minute = cleanMatchMinute(apiMatch?.min);
+    status = minute ? `EN JUEGO · ${minute}` : 'EN JUEGO';
+    statusClass = 'live';
+  }
 
   return { result, status, statusClass };
 }
 
-function renderMatchScoreboard(card, team1, team2, logo1 = '', logo2 = '') {
+function renderMatchScoreboard(card, team1, team2, logo1 = '', logo2 = '', apiMatch = null) {
   const box = document.getElementById('matchDetailScoreboard');
   if (!box) return;
 
   const flag1 = getTeamFlagForDetail(card, team1);
   const flag2 = getTeamFlagForDetail(card, team2);
-  const state = getScoreboardState(card);
+  const state = getScoreboardState(card, apiMatch);
 
   box.innerHTML = `
     <div class="scoreboard-teams">
@@ -4569,6 +4586,32 @@ function renderMatchScoreboard(card, team1, team2, logo1 = '', logo2 = '') {
       ${renderScoreboardTeam(team2, flag2, logo2)}
     </div>
   `;
+}
+
+
+/* v21.2: metadatos y estados limpios */
+function friendlyStageText(card) {
+  const stage = (card.dataset.stage || '').trim();
+  const groupText = getGroupOrStageFromCard(card);
+  if (stage) return stage;
+  return groupText || 'Partido';
+}
+
+function friendlyKickoffText(card) {
+  const date = card.dataset.date || '';
+  const time = card.querySelector('.match-time')?.childNodes?.[0]?.textContent?.trim() || '';
+
+  if (!date) return time || 'Horario pendiente';
+
+  const [y, m, d] = date.split('-');
+  return `${d}/${m}/${y}${time ? ' · ' + time : ''}`;
+}
+
+function cleanMatchMinute(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw || raw === 'notstarted' || raw === 'not started' || raw === 'null' || raw === 'undefined' || raw === 'finished') return '';
+  if (/^\d+(\+\d+)?$/.test(raw)) return raw + "'";
+  return '';
 }
 
 function openMatchDetail(card) {
@@ -4584,13 +4627,13 @@ function openMatchDetail(card) {
   const team2Flag = getTeamFlagFromCard(card, team2);
   const apiMatch = findApiMatchForCard(card);
 
-  hydrateMatchDetailLogos(card, team1, team2);
+  hydrateMatchDetailLogos(card, team1, team2, apiMatch);
 
   const scoreVisible = card.querySelector('.scoreline')?.textContent?.trim();
   const isLive = card.classList.contains('live-match');
   const isFinished = card.classList.contains('finished-match');
 
-  title.innerHTML = `${team1} <span style="opacity:.75">vs</span> ${team2}`;
+  title.innerHTML = `<span class="detail-meta-main">${friendlyStageText(card)}</span><span class="detail-meta-sub">${friendlyKickoffText(card)}</span>`;
   scoreBox.className = 'match-detail-score' + (isLive ? ' live' : '') + (isFinished ? ' finished' : '');
   scoreBox.textContent = scoreVisible || 'Pendiente';
 
@@ -4601,7 +4644,7 @@ function openMatchDetail(card) {
   const stadiumId = rawMatch.stadium_id || apiMatch?.stadium_id || '';
   const stadium = stadiumId ? (STADIUMS_BY_ID[String(stadiumId)] || `Estadio ID ${stadiumId}`) : 'Pendiente';
   const state = isLive ? 'En juego' : isFinished ? 'Finalizado' : 'Pendiente';
-  const minute = apiMatch?.min && apiMatch.min !== 'finished' ? apiMatch.min : '';
+  const minute = cleanMatchMinute(apiMatch?.min);
 
   body.innerHTML = `
     ${renderScorers(`Goles · ${team1Flag} ${team1}`.trim(), homeScorers)}
@@ -4611,7 +4654,7 @@ function openMatchDetail(card) {
       <div class="detail-section-title">Información</div>
       <div class="detail-section-content">
         <div class="detail-grid">
-          ${renderDetailItem('Estado', minute ? `${state} · ${minute}'` : state)}
+          ${renderDetailItem('Estado', minute ? `${state} · ${minute}` : state)}
           ${renderDetailItem('Fecha y hora', formatKickoff(card))}
           ${renderDetailItem('Grupo / Fase', getGroupOrStageFromCard(card))}
           ${renderDetailItem('Canal', card.dataset.channel || card.querySelector('.channel')?.textContent?.trim() || 'Pendiente')}
