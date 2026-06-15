@@ -1101,13 +1101,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
   filter: grayscale(.2);
 }
 
-.refresh-results-btn.refreshing {
-  animation: refreshSpin .8s linear infinite;
-}
-
-@keyframes refreshSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+to { transform: rotate(360deg); }
 }
 
 @media (max-width:760px) {
@@ -1125,6 +1119,14 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
     border-radius: 10px;
     font-size: 17px;
   }
+}
+
+
+/* v21.8: botón refresco simple, sin spinner ni cuenta atrás */
+.refresh-results-btn:disabled {
+  opacity: .45 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(.25);
 }
 
 </style>
@@ -1149,7 +1151,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 
 
-<!-- v21.7: index con tiempos desde /config del Worker -->
+
+<!-- v21.8: botón refresco simple sin spinner ni cuenta atrás -->
 </head>
 <body>
 <main class="page">
@@ -4859,34 +4862,26 @@ function getManualRefreshLockSeconds() {
 </script>
 
 
+
 <script>
-/* v21.7: refresco manual usando configuración del Worker */
+/* v21.8: refresco manual simple, sin spinner ni cuenta atrás */
 document.addEventListener('DOMContentLoaded', async () => {
   const btn = document.getElementById('refreshResultsBtn');
   if (!btn) return;
 
-  await loadMundialRemoteConfig();
-
-  function setRefreshLocked(seconds) {
-    btn.disabled = true;
-    btn.classList.remove('refreshing');
-    btn.textContent = '↻';
-    btn.title = `Refresco manual bloqueado durante ${seconds} s`;
-
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.textContent = '↻';
-      btn.title = 'Refrescar resultados';
-    }, seconds * 1000);
+  if (typeof loadMundialRemoteConfig === 'function') {
+    await loadMundialRemoteConfig();
   }
+
+  btn.textContent = '↻';
+  btn.title = 'Refrescar resultados';
 
   btn.addEventListener('click', async () => {
     if (btn.disabled) return;
 
     btn.disabled = true;
-    btn.classList.add('refreshing');
     btn.textContent = '↻';
-    btn.title = 'Refrescando resultados...';
+    btn.title = 'Refresco manual bloqueado temporalmente';
 
     try {
       if (typeof updateResults === 'function') {
@@ -4894,12 +4889,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     } catch (e) {
       console.warn('[Mundial 2026] Error en refresco manual:', e);
-    } finally {
-      setRefreshLocked(getManualRefreshLockSeconds());
     }
+
+    const seconds = typeof getManualRefreshLockSeconds === 'function'
+      ? getManualRefreshLockSeconds()
+      : 10;
+
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '↻';
+      btn.title = 'Refrescar resultados';
+    }, seconds * 1000);
   });
 });
 </script>
+
 
 
 
