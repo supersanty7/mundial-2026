@@ -1092,7 +1092,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 
 
-<!-- v21.2: modal con meta arriba y estado limpio -->
+
+<!-- v21.3: corrección estado live en resultados y modal -->
 </head>
 <body>
 <main class="page">
@@ -3946,7 +3947,12 @@ function clean(v){return String(v||'').toLowerCase().normalize('NFD').replace(/[
 function teamMatches(api,local){const localApi=apiNameToLocal(api);const a=clean(localApi);return a===clean(local)||(TEAM_ALIASES[local]||[local]).some(x=>a===clean(x)||a.includes(clean(x))||clean(x).includes(a))}
 function arr(payload){if(Array.isArray(payload))return payload;if(!payload||typeof payload!=='object')return[];for(const k of ['games','matches','data','results','fixtures'])if(Array.isArray(payload[k]))return payload[k];return[]}
 function pick(...v){return v.find(x=>x!==undefined&&x!==null&&x!=='')}
-function status(s){s=clean(s);if(['live','in play','playing','first half','second half','halftime','1h','2h'].some(x=>s.includes(x)))return'live';if(['finished','full time','fulltime','ft','ended','complete','completed'].some(x=>s.includes(x)))return'finished';return'scheduled'}
+function status(s){
+ s=String(s||'').toLowerCase().trim();
+ if(s==='live'||s==='playing'||s.includes('1st')||s.includes('first')||s.includes('2nd')||s.includes('second')||/^\d+(\+\d+)?$/.test(s))return 'live';
+ if(s.includes('finish')||s==='ft'||s==='finished')return 'finished';
+ return 'scheduled';
+}
 function norm(m){return{
 h:apiNameToLocal(pick(m.home_team_name_en,m.home_team,m.homeTeam,m.team1,m.home,m.home_name,m.homeTeamName,m.home?.name,m.homeTeam?.name,m.teams?.home?.name)),
 a:apiNameToLocal(pick(m.away_team_name_en,m.away_team,m.awayTeam,m.team2,m.away,m.away_name,m.awayTeamName,m.away?.name,m.awayTeam?.name,m.teams?.away?.name)),
@@ -4547,22 +4553,30 @@ function renderScoreboardTeam(team, flag, logoUrl) {
 
 function getScoreboardState(card, apiMatch = null) {
   const scoreVisible = card.querySelector('.scoreline')?.textContent?.trim();
-  const isLive = card.classList.contains('live-match');
-  const isFinished = card.classList.contains('finished-match');
 
   let result = scoreVisible || 'vs';
   result = result.replace(/^FINAL\s*/i, '').replace(/^EN JUEGO\s*/i, '').trim();
 
+  const elapsed = String(apiMatch?.min || apiMatch?.time_elapsed || '')
+    .trim()
+    .toLowerCase();
+
   let status = 'PENDIENTE';
   let statusClass = 'pending';
 
-  if (isFinished) {
-    status = 'FINAL';
-    statusClass = 'finished';
-  } else if (isLive) {
-    const minute = cleanMatchMinute(apiMatch?.min);
+  if (elapsed === 'live' || card.classList.contains('live-match')) {
+    const minute = cleanMatchMinute(elapsed);
     status = minute ? `EN JUEGO · ${minute}` : 'EN JUEGO';
     statusClass = 'live';
+  } else if (elapsed === 'finished' || card.classList.contains('finished-match')) {
+    status = 'FINAL';
+    statusClass = 'finished';
+  } else if (/^\d+(\+\d+)?$/.test(elapsed)) {
+    status = `EN JUEGO · ${elapsed}'`;
+    statusClass = 'live';
+  } else {
+    status = 'PENDIENTE';
+    statusClass = 'pending';
   }
 
   return { result, status, statusClass };
@@ -4609,8 +4623,24 @@ function friendlyKickoffText(card) {
 
 function cleanMatchMinute(value) {
   const raw = String(value || '').trim().toLowerCase();
-  if (!raw || raw === 'notstarted' || raw === 'not started' || raw === 'null' || raw === 'undefined' || raw === 'finished') return '';
-  if (/^\d+(\+\d+)?$/.test(raw)) return raw + "'";
+
+  if (
+    !raw ||
+    raw === 'live' ||
+    raw === 'finished' ||
+    raw === 'notstarted' ||
+    raw === 'not started' ||
+    raw === 'scheduled' ||
+    raw === 'null' ||
+    raw === 'undefined'
+  ) {
+    return '';
+  }
+
+  if (/^\d+(\+\d+)?$/.test(raw)) {
+    return raw + "'";
+  }
+
   return '';
 }
 
@@ -4644,7 +4674,7 @@ function openMatchDetail(card) {
   const stadiumId = rawMatch.stadium_id || apiMatch?.stadium_id || '';
   const stadium = stadiumId ? (STADIUMS_BY_ID[String(stadiumId)] || `Estadio ID ${stadiumId}`) : 'Pendiente';
   const state = isLive ? 'En juego' : isFinished ? 'Finalizado' : 'Pendiente';
-  const minute = cleanMatchMinute(apiMatch?.min);
+  const minute = cleanMatchMinute(apiMatch?.min || apiMatch?.time_elapsed);
 
   body.innerHTML = `
     ${renderScorers(`Goles · ${team1Flag} ${team1}`.trim(), homeScorers)}
