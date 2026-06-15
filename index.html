@@ -1147,7 +1147,9 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 
 
-<!-- v21.5: botón manual de refresco de resultados -->
+
+
+<!-- v21.7: index con tiempos desde /config del Worker -->
 </head>
 <body>
 <main class="page">
@@ -4448,21 +4450,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+
+
 <script>
-/* v18.9: resultados rápidos con caché inmediata */
-document.addEventListener('DOMContentLoaded', () => {
-  if (typeof applyCachedResults === 'function') applyCachedResults();
+/* v21.7: inicializador de resultados usando /config */
+document.addEventListener('DOMContentLoaded', async () => {
+  if (typeof loadMundialRemoteConfig === 'function') {
+    await loadMundialRemoteConfig();
+  }
+
+  if (typeof applyCachedResults === 'function') {
+    applyCachedResults();
+  }
 
   if (typeof updateResults === 'function') {
     setTimeout(updateResults, 50);
 
     if (!window.__worldCupResultsIntervalStarted) {
       window.__worldCupResultsIntervalStarted = true;
-      setInterval(updateResults, RESULTS_REFRESH_MS || 60000);
+      setInterval(updateResults, getClientAutoRefreshMs());
     }
   }
 });
 </script>
+
+
 
 
 <div class="match-detail-overlay" id="matchDetailOverlay" aria-hidden="true">
@@ -4804,38 +4816,68 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 
+
+
 <script>
-/* v21.5: refresco manual sin alterar el intervalo automático */
-document.addEventListener('DOMContentLoaded', () => {
+/* v21.7: configuración remota desde Worker */
+window.MUNDIAL_CONFIG = {
+  results_cache_seconds_no_live: 60,
+  results_cache_seconds_live: 15,
+  manual_refresh_lock_seconds: 10,
+  client_auto_refresh_seconds: 60,
+  team_logo_cache_seconds: 2592000
+};
+
+async function loadMundialRemoteConfig() {
+  try {
+    const base = RESULTS_API_URL.endsWith('/') ? RESULTS_API_URL : RESULTS_API_URL + '/';
+    const res = await fetch(base + 'config', { cache: 'no-store' });
+    if (!res.ok) return window.MUNDIAL_CONFIG;
+
+    const cfg = await res.json();
+
+    window.MUNDIAL_CONFIG = {
+      ...window.MUNDIAL_CONFIG,
+      ...cfg
+    };
+
+    return window.MUNDIAL_CONFIG;
+  } catch (e) {
+    console.warn('[Mundial 2026] No se pudo cargar /config:', e);
+    return window.MUNDIAL_CONFIG;
+  }
+}
+
+function getClientAutoRefreshMs() {
+  const seconds = Number(window.MUNDIAL_CONFIG?.client_auto_refresh_seconds || 60);
+  return Math.max(5, seconds) * 1000;
+}
+
+function getManualRefreshLockSeconds() {
+  return Number(window.MUNDIAL_CONFIG?.manual_refresh_lock_seconds || 10);
+}
+</script>
+
+
+<script>
+/* v21.7: refresco manual usando configuración del Worker */
+document.addEventListener('DOMContentLoaded', async () => {
   const btn = document.getElementById('refreshResultsBtn');
   if (!btn) return;
 
-  const lockSeconds = 10;
-  let unlockTimer = null;
+  await loadMundialRemoteConfig();
 
   function setRefreshLocked(seconds) {
     btn.disabled = true;
     btn.classList.remove('refreshing');
+    btn.textContent = '↻';
+    btn.title = `Refresco manual bloqueado durante ${seconds} s`;
 
-    let remaining = seconds;
-    btn.textContent = String(remaining);
-    btn.title = `Podrás refrescar de nuevo en ${remaining} s`;
-
-    clearInterval(unlockTimer);
-    unlockTimer = setInterval(() => {
-      remaining -= 1;
-
-      if (remaining <= 0) {
-        clearInterval(unlockTimer);
-        btn.disabled = false;
-        btn.textContent = '↻';
-        btn.title = 'Refrescar resultados';
-        return;
-      }
-
-      btn.textContent = String(remaining);
-      btn.title = `Podrás refrescar de nuevo en ${remaining} s`;
-    }, 1000);
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '↻';
+      btn.title = 'Refrescar resultados';
+    }, seconds * 1000);
   }
 
   btn.addEventListener('click', async () => {
@@ -4853,11 +4895,13 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       console.warn('[Mundial 2026] Error en refresco manual:', e);
     } finally {
-      setRefreshLocked(lockSeconds);
+      setRefreshLocked(getManualRefreshLockSeconds());
     }
   });
 });
 </script>
+
+
 
 </body>
 </html>
