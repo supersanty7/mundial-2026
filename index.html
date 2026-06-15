@@ -1051,7 +1051,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 
 
-<!-- v20: modal de detalle de partido -->
+
+<!-- v20.1: detalle de partido con goleadores corregidos -->
 </head>
 <body>
 <main class="page">
@@ -4401,15 +4402,29 @@ function getCachedApiMatchesForDetails() {
 function findApiMatchForCard(card) {
   const api = getCachedApiMatchesForDetails();
   if (!api.length) return null;
-  return findMatch(api, card.dataset.team1, card.dataset.team2);
+
+  for (const raw of api) {
+    const m = norm(raw);
+    if (!m.h || !m.a) continue;
+
+    const direct = teamMatches(m.h, card.dataset.team1) && teamMatches(m.a, card.dataset.team2);
+    const reverse = teamMatches(m.h, card.dataset.team2) && teamMatches(m.a, card.dataset.team1);
+
+    if (direct || reverse) {
+      return { ...m, raw, rev: reverse };
+    }
+  }
+
+  return null;
 }
 
 function parseScorers(value) {
   if (!value || value === 'null' || value === null) return [];
+
   return String(value)
     .replace(/[{}]/g, '')
     .replace(/[“”]/g, '"')
-    .split(/","|", "|,”|,”|,/)
+    .split(/"\s*,\s*"|,\s*/)
     .map(s => s.replace(/^["'\s]+|["'\s]+$/g, '').trim())
     .filter(Boolean);
 }
@@ -4469,10 +4484,11 @@ function openMatchDetail(card) {
   scoreBox.className = 'match-detail-score' + (isLive ? ' live' : '') + (isFinished ? ' finished' : '');
   scoreBox.textContent = scoreVisible || 'Pendiente';
 
-  const homeScorers = apiMatch ? parseScorers(apiMatch.rev ? apiMatch.away_scorers : apiMatch.home_scorers) : [];
-  const awayScorers = apiMatch ? parseScorers(apiMatch.rev ? apiMatch.home_scorers : apiMatch.away_scorers) : [];
+  const rawMatch = apiMatch?.raw || {};
+  const homeScorers = apiMatch ? parseScorers(apiMatch.rev ? rawMatch.away_scorers : rawMatch.home_scorers) : [];
+  const awayScorers = apiMatch ? parseScorers(apiMatch.rev ? rawMatch.home_scorers : rawMatch.away_scorers) : [];
 
-  const stadiumId = apiMatch?.stadium_id || '';
+  const stadiumId = rawMatch.stadium_id || apiMatch?.stadium_id || '';
   const stadium = stadiumId ? (STADIUMS_BY_ID[String(stadiumId)] || `Estadio ID ${stadiumId}`) : 'Pendiente';
   const state = isLive ? 'En juego' : isFinished ? 'Finalizado' : 'Pendiente';
   const minute = apiMatch?.min && apiMatch.min !== 'finished' ? apiMatch.min : '';
@@ -4487,7 +4503,7 @@ function openMatchDetail(card) {
           ${renderDetailItem('Grupo / Fase', getGroupOrStageFromCard(card))}
           ${renderDetailItem('Canal', card.dataset.channel || card.querySelector('.channel')?.textContent?.trim() || 'Pendiente')}
           ${renderDetailItem('Estadio', stadium)}
-          ${renderDetailItem('Tipo', apiMatch?.type === 'group' ? 'Fase de grupos' : (apiMatch?.type || card.dataset.stage || 'Partido'))}
+          ${renderDetailItem('Tipo', rawMatch.type === 'group' ? 'Fase de grupos' : (rawMatch.type || card.dataset.stage || 'Partido'))}
         </div>
       </div>
     </section>
