@@ -24,7 +24,7 @@ h1 { margin:0; font-size:clamp(28px,4vw,54px); line-height:1; letter-spacing:-.0
 .legend span { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.26); border-radius:999px; padding:6px 10px; }
 
 .filters {
-  display:grid; grid-template-columns:1fr 1fr 1fr auto auto; gap:10px; align-items:end;
+  display:grid; grid-template-columns:1fr 1fr 1fr auto auto auto; gap:10px; align-items:end;
   padding:14px 18px; background:#eef4ff; border-bottom:1px solid var(--line);
 }
 .filter-control label, .check-control span {
@@ -109,7 +109,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
   h1 { font-size:20px; }
   .subtitle { font-size:12px; margin-top:3px; }
   .legend { display:none; }
-  .filters { grid-template-columns:1fr 1fr 1fr auto auto; gap:7px; padding:7px 10px; position:sticky; top:55px; z-index:9; }
+  .filters { grid-template-columns:1fr 1fr 1fr auto auto auto; gap:7px; padding:7px 10px; position:sticky; top:55px; z-index:9; }
   .filter-control label, .check-control span { display:none; }
   select,button { padding:7px 9px; font-size:12px; border-radius:10px; }
   .check-control { height:34px; padding:0 8px; font-size:12px; border-radius:10px; }
@@ -1075,6 +1075,58 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 .match-detail-title .detail-meta-sub{display:block;margin-top:3px;font-size:12px;font-weight:800;opacity:.82}
 .scoreboard-status{min-width:0}
 
+
+/* v21.5: botón manual de refresco de resultados */
+.refresh-results-btn {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid #0b5fff;
+  background: #0b5fff;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 950;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.refresh-results-btn:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  filter: grayscale(.2);
+}
+
+.refresh-results-btn.refreshing {
+  animation: refreshSpin .8s linear infinite;
+}
+
+@keyframes refreshSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width:760px) {
+  .refresh-results-btn {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width:980px) and (orientation:landscape) {
+  .refresh-results-btn {
+    height: 34px;
+    width: 38px;
+    min-width: 38px;
+    border-radius: 10px;
+    font-size: 17px;
+  }
+}
+
 </style>
 
 
@@ -1094,7 +1146,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 
 
-<!-- v21.4: limpia live del marcador y mantiene estado en juego -->
+
+<!-- v21.5: botón manual de refresco de resultados -->
 </head>
 <body>
 <main class="page">
@@ -1186,6 +1239,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
       <span>Solo España</span>
     </label>
     <button id="clearFilters" type="button">Limpiar</button>
+    <button id="refreshResultsBtn" class="refresh-results-btn" type="button" title="Refrescar resultados" aria-label="Refrescar resultados">↻</button>
   </section>
   <div class="results-info" id="resultsInfo"></div>
   <div class="results-status" id="resultsStatus" aria-live="polite" style="display:none!important"></div>
@@ -4745,6 +4799,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeMatchDetail();
+  });
+});
+</script>
+
+
+<script>
+/* v21.5: refresco manual sin alterar el intervalo automático */
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('refreshResultsBtn');
+  if (!btn) return;
+
+  const lockSeconds = 10;
+  let unlockTimer = null;
+
+  function setRefreshLocked(seconds) {
+    btn.disabled = true;
+    btn.classList.remove('refreshing');
+
+    let remaining = seconds;
+    btn.textContent = String(remaining);
+    btn.title = `Podrás refrescar de nuevo en ${remaining} s`;
+
+    clearInterval(unlockTimer);
+    unlockTimer = setInterval(() => {
+      remaining -= 1;
+
+      if (remaining <= 0) {
+        clearInterval(unlockTimer);
+        btn.disabled = false;
+        btn.textContent = '↻';
+        btn.title = 'Refrescar resultados';
+        return;
+      }
+
+      btn.textContent = String(remaining);
+      btn.title = `Podrás refrescar de nuevo en ${remaining} s`;
+    }, 1000);
+  }
+
+  btn.addEventListener('click', async () => {
+    if (btn.disabled) return;
+
+    btn.disabled = true;
+    btn.classList.add('refreshing');
+    btn.textContent = '↻';
+    btn.title = 'Refrescando resultados...';
+
+    try {
+      if (typeof updateResults === 'function') {
+        await updateResults();
+      }
+    } catch (e) {
+      console.warn('[Mundial 2026] Error en refresco manual:', e);
+    } finally {
+      setRefreshLocked(lockSeconds);
+    }
   });
 });
 </script>
