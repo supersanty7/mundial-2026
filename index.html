@@ -842,6 +842,203 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
   overflow: hidden !important;
 }
 
+
+/* v20: detalle de partido al pulsar tarjeta */
+.match {
+  cursor: pointer;
+}
+
+.match-detail-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(2, 6, 23, .55);
+  z-index: 9999;
+  padding: 14px;
+}
+
+.match-detail-overlay.active {
+  display: flex;
+}
+
+.match-detail-modal {
+  width: min(680px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 22px 22px 16px 16px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.35);
+}
+
+.match-detail-header {
+  padding: 18px 18px 14px;
+  background: linear-gradient(135deg, #073c9c, #0b5fff);
+  color: #ffffff;
+  position: relative;
+}
+
+.match-detail-close {
+  position: absolute;
+  right: 12px;
+  top: 10px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255,255,255,.18);
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 950;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.match-detail-title {
+  margin: 0 42px 10px 0;
+  font-size: 20px;
+  line-height: 1.15;
+  font-weight: 950;
+}
+
+.match-detail-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.18);
+  font-weight: 950;
+  font-size: 18px;
+}
+
+.match-detail-score.live::before {
+  content: "● EN JUEGO";
+  color: #86efac;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+
+.match-detail-score.finished::before {
+  content: "FINAL";
+  color: #e2e8f0;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+
+.match-detail-body {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.detail-section {
+  border: 1px solid #dce6f4;
+  border-radius: 14px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.detail-section-title {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: #334155;
+  background: #eaf1ff;
+}
+
+.detail-section-content {
+  padding: 12px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.detail-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 9px 10px;
+}
+
+.detail-label {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.detail-value {
+  font-weight: 850;
+}
+
+.scorer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.scorer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 9px 10px;
+  font-weight: 800;
+}
+
+.scorer-ball {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #dcfce7;
+  font-size: 13px;
+}
+
+.detail-empty {
+  color: #64748b;
+  font-weight: 700;
+}
+
+@media (min-width: 761px) {
+  .match-detail-overlay {
+    align-items: center;
+  }
+}
+
+@media (max-width: 760px) {
+  .match-detail-overlay {
+    padding: 0;
+  }
+
+  .match-detail-modal {
+    max-height: 92vh;
+    border-radius: 22px 22px 0 0;
+  }
+
+  .match-detail-title {
+    font-size: 18px;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 </style>
 
 
@@ -853,7 +1050,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 
 
 
-<!-- v19: HTML con caché local + Worker con caché global -->
+
+<!-- v20: modal de detalle de partido -->
 </head>
 <body>
 <main class="page">
@@ -4153,6 +4351,183 @@ document.addEventListener('DOMContentLoaded', () => {
       setInterval(updateResults, RESULTS_REFRESH_MS || 60000);
     }
   }
+});
+</script>
+
+
+<div class="match-detail-overlay" id="matchDetailOverlay" aria-hidden="true">
+  <div class="match-detail-modal" role="dialog" aria-modal="true" aria-labelledby="matchDetailTitle">
+    <div class="match-detail-header">
+      <button class="match-detail-close" id="matchDetailClose" type="button" aria-label="Cerrar">×</button>
+      <h2 class="match-detail-title" id="matchDetailTitle">Detalle del partido</h2>
+      <div class="match-detail-score" id="matchDetailScore">Pendiente</div>
+    </div>
+    <div class="match-detail-body" id="matchDetailBody"></div>
+  </div>
+</div>
+
+
+<script>
+/* v20: ficha detallada de partido */
+const STADIUMS_BY_ID = {
+  "1": "Estadio Azteca / Mexico City Stadium",
+  "2": "Estadio Guadalajara",
+  "3": "Estadio Monterrey",
+  "4": "BMO Field / Toronto Stadium",
+  "5": "BC Place / Vancouver Stadium",
+  "6": "MetLife Stadium / New York New Jersey Stadium",
+  "7": "SoFi Stadium / Los Angeles Stadium",
+  "8": "AT&T Stadium / Dallas Stadium",
+  "9": "Mercedes-Benz Stadium / Atlanta Stadium",
+  "10": "NRG Stadium / Houston Stadium",
+  "11": "Lincoln Financial Field / Philadelphia Stadium",
+  "12": "Lumen Field / Seattle Stadium",
+  "13": "Levi's Stadium / San Francisco Bay Area Stadium",
+  "14": "Hard Rock Stadium / Miami Stadium",
+  "15": "Gillette Stadium / Boston Stadium",
+  "16": "Arrowhead Stadium / Kansas City Stadium"
+};
+
+function getCachedApiMatchesForDetails() {
+  try {
+    const cached = localStorage.getItem('mundial2026_results_cache_v1');
+    if (!cached) return [];
+    return arr(JSON.parse(cached));
+  } catch {
+    return [];
+  }
+}
+
+function findApiMatchForCard(card) {
+  const api = getCachedApiMatchesForDetails();
+  if (!api.length) return null;
+  return findMatch(api, card.dataset.team1, card.dataset.team2);
+}
+
+function parseScorers(value) {
+  if (!value || value === 'null' || value === null) return [];
+  return String(value)
+    .replace(/[{}]/g, '')
+    .replace(/[“”]/g, '"')
+    .split(/","|", "|,”|,”|,/)
+    .map(s => s.replace(/^["'\s]+|["'\s]+$/g, '').trim())
+    .filter(Boolean);
+}
+
+function getGroupOrStageFromCard(card) {
+  const stage = card.dataset.stage;
+  const group = card.querySelector('.group')?.textContent?.trim();
+  return stage || group || '';
+}
+
+function formatKickoff(card) {
+  const date = card.dataset.date || '';
+  const time = card.querySelector('.match-time')?.childNodes?.[0]?.textContent?.trim() || '';
+  if (!date) return time || 'Pendiente';
+  const [y, m, d] = date.split('-');
+  return `${d}/${m}/${y}${time ? ' · ' + time : ''}`;
+}
+
+function renderDetailItem(label, value) {
+  return `
+    <div class="detail-item">
+      <span class="detail-label">${label}</span>
+      <span class="detail-value">${value || 'Pendiente'}</span>
+    </div>
+  `;
+}
+
+function renderScorers(title, scorers) {
+  const content = scorers.length
+    ? `<div class="scorer-list">${scorers.map(s => `<div class="scorer-item"><span class="scorer-ball">⚽</span><span>${s}</span></div>`).join('')}</div>`
+    : `<div class="detail-empty">Sin goles registrados.</div>`;
+
+  return `
+    <section class="detail-section">
+      <div class="detail-section-title">${title}</div>
+      <div class="detail-section-content">${content}</div>
+    </section>
+  `;
+}
+
+function openMatchDetail(card) {
+  const overlay = document.getElementById('matchDetailOverlay');
+  const title = document.getElementById('matchDetailTitle');
+  const scoreBox = document.getElementById('matchDetailScore');
+  const body = document.getElementById('matchDetailBody');
+  if (!overlay || !title || !scoreBox || !body) return;
+
+  const team1 = card.dataset.team1 || '';
+  const team2 = card.dataset.team2 || '';
+  const apiMatch = findApiMatchForCard(card);
+
+  const scoreVisible = card.querySelector('.scoreline')?.textContent?.trim();
+  const isLive = card.classList.contains('live-match');
+  const isFinished = card.classList.contains('finished-match');
+
+  title.innerHTML = `${team1} <span style="opacity:.75">vs</span> ${team2}`;
+  scoreBox.className = 'match-detail-score' + (isLive ? ' live' : '') + (isFinished ? ' finished' : '');
+  scoreBox.textContent = scoreVisible || 'Pendiente';
+
+  const homeScorers = apiMatch ? parseScorers(apiMatch.rev ? apiMatch.away_scorers : apiMatch.home_scorers) : [];
+  const awayScorers = apiMatch ? parseScorers(apiMatch.rev ? apiMatch.home_scorers : apiMatch.away_scorers) : [];
+
+  const stadiumId = apiMatch?.stadium_id || '';
+  const stadium = stadiumId ? (STADIUMS_BY_ID[String(stadiumId)] || `Estadio ID ${stadiumId}`) : 'Pendiente';
+  const state = isLive ? 'En juego' : isFinished ? 'Finalizado' : 'Pendiente';
+  const minute = apiMatch?.min && apiMatch.min !== 'finished' ? apiMatch.min : '';
+
+  body.innerHTML = `
+    <section class="detail-section">
+      <div class="detail-section-title">Información</div>
+      <div class="detail-section-content">
+        <div class="detail-grid">
+          ${renderDetailItem('Estado', minute ? `${state} · ${minute}'` : state)}
+          ${renderDetailItem('Fecha y hora', formatKickoff(card))}
+          ${renderDetailItem('Grupo / Fase', getGroupOrStageFromCard(card))}
+          ${renderDetailItem('Canal', card.dataset.channel || card.querySelector('.channel')?.textContent?.trim() || 'Pendiente')}
+          ${renderDetailItem('Estadio', stadium)}
+          ${renderDetailItem('Tipo', apiMatch?.type === 'group' ? 'Fase de grupos' : (apiMatch?.type || card.dataset.stage || 'Partido'))}
+        </div>
+      </div>
+    </section>
+
+    ${renderScorers(`Goles · ${team1}`, homeScorers)}
+    ${renderScorers(`Goles · ${team2}`, awayScorers)}
+
+    <section class="detail-section">
+      <div class="detail-section-title">Datos disponibles</div>
+      <div class="detail-section-content detail-empty">
+        Esta ficha usa los datos gratuitos disponibles actualmente: marcador, estado, goleadores, minuto, grupo/fase, canal y estadio si la API lo proporciona.
+      </div>
+    </section>
+  `;
+
+  overlay.classList.add('active');
+  overlay.setAttribute('aria-hidden', 'false');
+}
+
+function closeMatchDetail() {
+  const overlay = document.getElementById('matchDetailOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('active');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.match').forEach(card => {
+    card.addEventListener('click', () => openMatchDetail(card));
+  });
+
+  document.getElementById('matchDetailClose')?.addEventListener('click', closeMatchDetail);
+
+  document.getElementById('matchDetailOverlay')?.addEventListener('click', (event) => {
+    if (event.target.id === 'matchDetailOverlay') closeMatchDetail();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeMatchDetail();
+  });
 });
 </script>
 
