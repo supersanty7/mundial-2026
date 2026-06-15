@@ -851,7 +851,8 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"1674597aaf6b43dd83821f5b3c535d00"}'></script>
 <!-- End Cloudflare Web Analytics -->
 
-<!-- v18.8: barra de estado oculta definitivamente -->
+
+<!-- v18.9: resultados optimizados con caché e índice -->
 </head>
 <body>
 <main class="page">
@@ -3726,58 +3727,89 @@ function clearAutomaticScores() {
 }
 
 function setScore(key,txt,st,min){document.querySelectorAll(`.match[data-result-key="${CSS.escape(key)}"]`).forEach(c=>{const s=c.querySelector('.scoreline');if(!s)return;c.classList.add('has-score');c.classList.toggle('live-match',st==='live');c.classList.toggle('finished-match',st==='finished');s.textContent=txt+(st==='live'&&min?` · ${min}'`:'')})}
-async function updateResults(){
- if(resultsFetchInProgress)return;
- resultsFetchInProgress = true;
- const box=document.getElementById('resultsStatus');
- try{
-  clearAutomaticScores();
-  const res=await fetch(RESULTS_API_URL,{cache:'no-store'});
-  if(!res.ok)throw new Error(res.status);
-  const api=arr(await res.json());
-  const done=new Set();
-  let updated=0;
 
-  document.querySelectorAll('.match').forEach(card=>{
-   const key=card.dataset.resultKey;
-   if(!key || done.has(key))return;
-   done.add(key);
+const RESULTS_CACHE_KEY = 'mundial2026_results_cache_v1';
 
-   const m=findMatch(api,card.dataset.team1,card.dataset.team2);
-   if(!m)return;
+function pairKey(a, b) {
+  return [clean(apiNameToLocal(a)), clean(apiNameToLocal(b))].sort().join('|');
+}
 
-   if(m.st !== 'live' && m.st !== 'finished') return;
+function indexApiMatches(apiMatches) {
+  const map = new Map();
+  apiMatches.forEach(raw => {
+    const m = norm(raw);
+    if (!m.h || !m.a) return;
+    map.set(pairKey(m.h, m.a), m);
+  });
+  return map;
+}
 
-   const s1=m.rev?m.as:m.hs;
-   const s2=m.rev?m.hs:m.as;
-   if(s1===undefined||s2===undefined||s1===null||s2===null||s1===''||s2===''||s1==='null'||s2==='null')return;
+function applyIndexedResults(resultMap, sourceLabel = '') {
+  let updated = 0;
 
-   setScore(key,`${s1} - ${s2}`,m.st,m.min);
-   updated++;
+  document.querySelectorAll('.match').forEach(card => {
+    const t1 = card.dataset.team1;
+    const t2 = card.dataset.team2;
+    if (!t1 || !t2) return;
+
+    const m = resultMap.get(pairKey(t1, t2));
+    if (!m) return;
+    if (m.st !== 'live' && m.st !== 'finished') return;
+
+    const direct = clean(m.h) === clean(t1) && clean(m.a) === clean(t2);
+    const s1 = direct ? m.hs : m.as;
+    const s2 = direct ? m.as : m.hs;
+
+    if (
+      s1 === undefined || s2 === undefined ||
+      s1 === null || s2 === null ||
+      s1 === '' || s2 === '' ||
+      s1 === 'null' || s2 === 'null'
+    ) return;
+
+    setScore(card.dataset.resultKey, `${s1} - ${s2}`, m.st, m.min);
+    updated++;
   });
 
-  if(typeof renderStandings==='function'){renderStandings();}
+  if (typeof renderStandings === 'function') renderStandings();
 
-  if(box){
-    if(updated){
-      box.style.display='none';
-      box.textContent='';
-      setTimeout(()=>box.style.display='none',4000);
-    } else {
-      box.style.display='none';
-    }
-  }
+  console.info(`[Mundial 2026] Resultados aplicados${sourceLabel ? ' desde ' + sourceLabel : ''}:`, updated);
+  return updated;
+}
 
-  console.info('[Mundial 2026] Resultados procesados:', updated);
- }catch(e){
-  if(box){
-    box.style.display='none';
-    box.textContent='';
-    setTimeout(()=>box.style.display='none',6000);
+function applyCachedResults() {
+  try {
+    const cached = localStorage.getItem(RESULTS_CACHE_KEY);
+    if (!cached) return 0;
+    const payload = JSON.parse(cached);
+    const api = arr(payload);
+    if (!api.length) return 0;
+    return applyIndexedResults(indexApiMatches(api), 'caché');
+  } catch (e) {
+    console.warn('[Mundial 2026] No se pudo leer la caché de resultados:', e);
+    return 0;
   }
-  console.warn('[Mundial 2026] Error consultando resultados:',e);
- }
- finally { resultsFetchInProgress = false; }
+}
+
+async function updateResults() {
+  if (resultsFetchInProgress) return;
+  resultsFetchInProgress = true;
+
+  try {
+    const separator = RESULTS_API_URL.includes('?') ? '&' : '?';
+    const res = await fetch(`${RESULTS_API_URL}${separator}t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(res.status);
+
+    const payload = await res.json();
+    localStorage.setItem(RESULTS_CACHE_KEY, JSON.stringify(payload));
+
+    const api = arr(payload);
+    applyIndexedResults(indexApiMatches(api), 'Worker');
+  } catch (e) {
+    console.warn('[Mundial 2026] Error consultando resultados:', e);
+  } finally {
+    resultsFetchInProgress = false;
+  }
 }
 
 </script>
@@ -4104,11 +4136,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+
+
+
 <script>
-/* v18.3: inicializador único de resultados */
+/* v18.9: resultados rápidos con caché inmediata */
 document.addEventListener('DOMContentLoaded', () => {
+  if (typeof applyCachedResults === 'function') applyCachedResults();
+
   if (typeof updateResults === 'function') {
-    updateResults();
+    setTimeout(updateResults, 50);
+
     if (!window.__worldCupResultsIntervalStarted) {
       window.__worldCupResultsIntervalStarted = true;
       setInterval(updateResults, RESULTS_REFRESH_MS || 60000);
