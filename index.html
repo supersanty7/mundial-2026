@@ -1138,6 +1138,88 @@ to { transform: rotate(360deg); }
 @media(max-width:760px){.results-updated-label{width:100%;min-height:40px;font-size:11px;padding:0 8px}}
 @media(max-width:980px) and (orientation:landscape){.results-updated-label{min-height:34px;font-size:10px;padding:0 8px}}
 
+
+/* v22: ajustar fila Limpiar + refrescar + actualizado */
+@media (max-width:760px) {
+  .filters {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  #clearFilters {
+    width: auto !important;
+    min-width: 0 !important;
+    height: 40px !important;
+    padding: 0 14px !important;
+  }
+
+  #refreshResultsBtn {
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 40px !important;
+    padding: 0 !important;
+    font-size: 18px !important;
+  }
+
+  #clearFilters,
+  #refreshResultsBtn,
+  #resultsUpdatedLabel {
+    grid-row: 3;
+  }
+
+  #clearFilters {
+    grid-column: 1;
+  }
+
+  #refreshResultsBtn {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  #resultsUpdatedLabel {
+    grid-column: 2;
+    justify-self: stretch;
+    margin-left: 52px;
+    width: auto !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    padding: 0 8px !important;
+    font-size: 10.5px !important;
+    border-radius: 12px !important;
+    white-space: nowrap !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .results-updated-label.fresh {
+    background: #eef8f0 !important;
+    color: #25633a !important;
+    border-color: #b7e4c7 !important;
+  }
+
+  .results-updated-label.warning {
+    background: #fff8e6 !important;
+    color: #7a4b00 !important;
+  }
+
+  .results-updated-label.stale {
+    background: #fff1f2 !important;
+    color: #8b1d1d !important;
+  }
+}
+
+@media (max-width:390px) {
+  #resultsUpdatedLabel {
+    font-size: 9.5px !important;
+    padding: 0 6px !important;
+    margin-left: 48px;
+  }
+
+  #clearFilters {
+    padding: 0 10px !important;
+    font-size: 12px !important;
+  }
+}
+
 </style>
 
 
@@ -1162,7 +1244,8 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v21.9: última actualización de resultados -->
+
+<!-- v22: fila de refresco compacta -->
 </head>
 <body>
 <main class="page">
@@ -4946,6 +5029,64 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
 
+
+
+<script>
+/* v22: formato compacto de última actualización en móvil */
+function formatMadridUpdateCompact(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+
+  const parts = new Intl.DateTimeFormat('es-ES', {
+    timeZone: 'Europe/Madrid',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).formatToParts(d);
+
+  const get = type => parts.find(p => p.type === type)?.value || '';
+  return `${get('day')}/${get('month')} · ${get('hour')}:${get('minute')}:${get('second')}`;
+}
+
+const __oldUpdateResultsUpdatedLabel = window.updateResultsUpdatedLabel;
+window.updateResultsUpdatedLabel = function(iso) {
+  const label = document.getElementById('resultsUpdatedLabel');
+  if (!label) {
+    if (typeof __oldUpdateResultsUpdatedLabel === 'function') __oldUpdateResultsUpdatedLabel(iso);
+    return;
+  }
+
+  if (!iso) {
+    label.textContent = 'Actualizado: —';
+    label.className = 'results-updated-label';
+    return;
+  }
+
+  window.__lastResultsUpdatedAt = iso;
+  const date = new Date(iso);
+  const ageSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+
+  const isMobile = window.matchMedia('(max-width: 760px)').matches;
+  label.textContent = isMobile
+    ? `Actualizado: ${formatMadridUpdateCompact(iso)}`
+    : `Actualizado: ${formatMadridTimeFromIso(iso)}`;
+
+  label.className = 'results-updated-label';
+  if (ageSeconds <= 60) label.classList.add('fresh');
+  else if (ageSeconds <= 300) label.classList.add('warning');
+  else label.classList.add('stale');
+};
+
+window.addEventListener('resize', () => {
+  if (window.__lastResultsUpdatedAt) {
+    window.updateResultsUpdatedLabel(window.__lastResultsUpdatedAt);
+  }
+});
+</script>
 
 </body>
 </html>
