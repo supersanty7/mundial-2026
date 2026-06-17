@@ -1245,7 +1245,8 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v22: fila de refresco compacta -->
+
+<!-- v22.1: carga inicial desde Worker y localStorage solo offline -->
 </head>
 <body>
 <main class="page">
@@ -4199,13 +4200,18 @@ function applyCachedResults() {
   }
 }
 
-async function updateResults() {
+async function updateResults(options = {}) {
+  const forceRefresh = options.forceRefresh === true;
   if (resultsFetchInProgress) return;
   resultsFetchInProgress = true;
 
   try {
     const separator = RESULTS_API_URL.includes('?') ? '&' : '?';
-    const res = await fetch(`${RESULTS_API_URL}${separator}t=${Date.now()}`, { cache: 'no-store' });
+    const url = forceRefresh
+      ? `${RESULTS_API_URL}${separator}refresh=1&t=${Date.now()}`
+      : `${RESULTS_API_URL}${separator}t=${Date.now()}`;
+
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(res.status);
 
     const updatedAt = res.headers.get('X-Results-Updated-At') || res.headers.get('Date');
@@ -4218,6 +4224,7 @@ async function updateResults() {
     applyIndexedResults(indexApiMatches(api), 'Worker');
   } catch (e) {
     console.warn('[Mundial 2026] Error consultando resultados:', e);
+    throw e;
   } finally {
     resultsFetchInProgress = false;
   }
@@ -4552,27 +4559,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+
 <script>
-/* v21.7: inicializador de resultados usando /config */
+/* v22.1: caché local solo como fallback si falla el Worker */
+async function loadResultsFromWorkerFirst() {
+  if (typeof updateResults !== 'function') return;
+
+  try {
+    await updateResults({ forceRefresh: false });
+  } catch (e) {
+    console.warn('[Mundial 2026] No se pudo recuperar del Worker; usando caché local si existe:', e);
+    if (typeof applyCachedResults === 'function') applyCachedResults();
+  }
+}
+</script>
+
+
+<script>
+/* v22.1: inicializador priorizando caché del Worker */
 document.addEventListener('DOMContentLoaded', async () => {
   if (typeof loadMundialRemoteConfig === 'function') {
     await loadMundialRemoteConfig();
   }
 
-  if (typeof applyCachedResults === 'function') {
-    applyCachedResults();
+  if (typeof loadResultsFromWorkerFirst === 'function') {
+    await loadResultsFromWorkerFirst();
+  } else if (typeof updateResults === 'function') {
+    await updateResults({ forceRefresh: false });
   }
 
-  if (typeof updateResults === 'function') {
-    setTimeout(updateResults, 50);
-
-    if (!window.__worldCupResultsIntervalStarted) {
-      window.__worldCupResultsIntervalStarted = true;
-      setInterval(updateResults, getClientAutoRefreshMs());
-    }
+  if (typeof updateResults === 'function' && !window.__worldCupResultsIntervalStarted) {
+    window.__worldCupResultsIntervalStarted = true;
+    setInterval(() => updateResults({ forceRefresh: false }).catch(e => console.warn('[Mundial 2026] Error en refresco automático:', e)), getClientAutoRefreshMs());
   }
 });
 </script>
+
 
 
 
@@ -5008,7 +5030,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
       if (typeof updateResults === 'function') {
-        await updateResults();
+        await updateResults({ forceRefresh: true });
       }
     } catch (e) {
       console.warn('[Mundial 2026] Error en refresco manual:', e);
