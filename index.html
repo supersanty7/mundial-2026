@@ -24,7 +24,7 @@ h1 { margin:0; font-size:clamp(28px,4vw,54px); line-height:1; letter-spacing:-.0
 .legend span { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.26); border-radius:999px; padding:6px 10px; }
 
 .filters {
-  display:grid; grid-template-columns:1fr 1fr 1fr auto auto auto; gap:10px; align-items:end;
+  display:grid; grid-template-columns:1fr 1fr 1fr auto auto auto auto; gap:10px; align-items:end;
   padding:14px 18px; background:#eef4ff; border-bottom:1px solid var(--line);
 }
 .filter-control label, .check-control span {
@@ -109,7 +109,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
   h1 { font-size:20px; }
   .subtitle { font-size:12px; margin-top:3px; }
   .legend { display:none; }
-  .filters { grid-template-columns:1fr 1fr 1fr auto auto auto; gap:7px; padding:7px 10px; position:sticky; top:55px; z-index:9; }
+  .filters { grid-template-columns:1fr 1fr 1fr auto auto auto auto; gap:7px; padding:7px 10px; position:sticky; top:55px; z-index:9; }
   .filter-control label, .check-control span { display:none; }
   select,button { padding:7px 9px; font-size:12px; border-radius:10px; }
   .check-control { height:34px; padding:0 8px; font-size:12px; border-radius:10px; }
@@ -1129,6 +1129,15 @@ to { transform: rotate(360deg); }
   filter: grayscale(.25);
 }
 
+
+/* v21.9: última actualización junto al refresco */
+.results-updated-label{min-height:42px;display:inline-flex;align-items:center;justify-content:center;padding:0 11px;border-radius:12px;border:1px solid #c9d6ea;background:#fff;color:#475569;font-size:12px;font-weight:900;white-space:nowrap}
+.results-updated-label.fresh{color:#166534;background:#dcfce7;border-color:#86efac}
+.results-updated-label.warning{color:#92400e;background:#fef3c7;border-color:#fcd34d}
+.results-updated-label.stale{color:#991b1b;background:#fee2e2;border-color:#fca5a5}
+@media(max-width:760px){.results-updated-label{width:100%;min-height:40px;font-size:11px;padding:0 8px}}
+@media(max-width:980px) and (orientation:landscape){.results-updated-label{min-height:34px;font-size:10px;padding:0 8px}}
+
 </style>
 
 
@@ -1152,7 +1161,8 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v21.8: botón refresco simple sin spinner ni cuenta atrás -->
+
+<!-- v21.9: última actualización de resultados -->
 </head>
 <body>
 <main class="page">
@@ -1245,6 +1255,7 @@ to { transform: rotate(360deg); }
     </label>
     <button id="clearFilters" type="button">Limpiar</button>
     <button id="refreshResultsBtn" class="refresh-results-btn" type="button" title="Refrescar resultados" aria-label="Refrescar resultados">↻</button>
+    <span id="resultsUpdatedLabel" class="results-updated-label" aria-live="polite">Actualizado: —</span>
   </section>
   <div class="results-info" id="resultsInfo"></div>
   <div class="results-status" id="resultsStatus" aria-live="polite" style="display:none!important"></div>
@@ -4114,6 +4125,9 @@ async function updateResults() {
     const res = await fetch(`${RESULTS_API_URL}${separator}t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(res.status);
 
+    const updatedAt = res.headers.get('X-Results-Updated-At') || res.headers.get('Date');
+    if (typeof updateResultsUpdatedLabel === 'function') updateResultsUpdatedLabel(updatedAt);
+
     const payload = await res.json();
     localStorage.setItem(RESULTS_CACHE_KEY, JSON.stringify(payload));
 
@@ -4820,6 +4834,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+
+
+<script>
+/* v21.9: mostrar última actualización de resultados */
+window.__lastResultsUpdatedAt = window.__lastResultsUpdatedAt || null;
+function formatMadridTimeFromIso(iso){
+  if(!iso)return '—';
+  const d=new Date(iso);
+  if(Number.isNaN(d.getTime()))return '—';
+  return new Intl.DateTimeFormat('es-ES',{timeZone:'Europe/Madrid',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(d);
+}
+function updateResultsUpdatedLabel(iso){
+  const label=document.getElementById('resultsUpdatedLabel');
+  if(!label)return;
+  if(!iso){label.textContent='Actualizado: —';label.className='results-updated-label';return;}
+  window.__lastResultsUpdatedAt=iso;
+  const d=new Date(iso);
+  const ageSeconds=Math.max(0,Math.floor((Date.now()-d.getTime())/1000));
+  label.textContent=`Actualizado: ${formatMadridTimeFromIso(iso)}`;
+  label.className='results-updated-label';
+  if(ageSeconds<=60)label.classList.add('fresh');
+  else if(ageSeconds<=300)label.classList.add('warning');
+  else label.classList.add('stale');
+}
+setInterval(()=>{if(window.__lastResultsUpdatedAt)updateResultsUpdatedLabel(window.__lastResultsUpdatedAt);},30000);
+</script>
 
 <script>
 /* v21.7: configuración remota desde Worker */
