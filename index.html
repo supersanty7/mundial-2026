@@ -1247,7 +1247,7 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v22.2: ocultar goleadores inconsistentes -->
+<!-- v22.3: corregido estado y marcador en detalle -->
 </head>
 <body>
 <main class="page">
@@ -4106,7 +4106,7 @@ function pick(...v){return v.find(x=>x!==undefined&&x!==null&&x!=='')}
 function status(s){
  s=String(s||'').toLowerCase().trim();
  if(s==='live'||s==='playing'||s.includes('1st')||s.includes('first')||s.includes('2nd')||s.includes('second')||/^\d+(\+\d+)?$/.test(s))return 'live';
- if(s.includes('finish')||s==='ft'||s==='finished')return 'finished';
+ if(s.includes('finish')||s==='ft'||s==='finished'||s==='fulltime'||s==='full time')return 'finished';
  return 'scheduled';
 }
 function norm(m){return{
@@ -4767,34 +4767,73 @@ function cleanScoreText(value) {
   return text || 'vs';
 }
 
-function getScoreboardState(card, apiMatch = null) {
-  const scoreVisible = card.querySelector('.scoreline')?.textContent?.trim();
 
-  let result = cleanScoreText(scoreVisible);
+/* v22.3: normalización robusta de estado y marcador */
+function normalizeApiMatchStatus(apiMatch, card = null) {
+  const finishedRaw = String(apiMatch?.finished ?? '').trim().toLowerCase();
+  const elapsedRaw = String(apiMatch?.time_elapsed ?? apiMatch?.min ?? '').trim().toLowerCase();
+  const cardLive = !!card?.classList?.contains('live-match');
+  const cardFinished = !!card?.classList?.contains('finished-match');
 
-  const elapsed = String(apiMatch?.min || apiMatch?.time_elapsed || '')
-    .trim()
-    .toLowerCase();
-
-  let status = 'PENDIENTE';
-  let statusClass = 'pending';
-
-  if (elapsed === 'live' || card.classList.contains('live-match')) {
-    const minute = cleanMatchMinute(elapsed);
-    status = minute ? `EN JUEGO · ${minute}` : 'EN JUEGO';
-    statusClass = 'live';
-  } else if (elapsed === 'finished' || card.classList.contains('finished-match')) {
-    status = 'FINAL';
-    statusClass = 'finished';
-  } else if (/^\d+(\+\d+)?$/.test(elapsed)) {
-    status = `EN JUEGO · ${elapsed}'`;
-    statusClass = 'live';
-  } else {
-    status = 'PENDIENTE';
-    statusClass = 'pending';
+  if (
+    finishedRaw === 'true' ||
+    elapsedRaw === 'finished' ||
+    elapsedRaw === 'finish' ||
+    elapsedRaw === 'fulltime' ||
+    elapsedRaw === 'full time' ||
+    elapsedRaw === 'ft' ||
+    cardFinished
+  ) {
+    return { code: 'finished', label: 'FINAL', infoLabel: 'Finalizado', minute: '' };
   }
 
-  return { result, status, statusClass };
+  if (
+    elapsedRaw === 'live' ||
+    elapsedRaw === 'playing' ||
+    elapsedRaw.includes('first half') ||
+    elapsedRaw.includes('second half') ||
+    elapsedRaw.includes('halftime') ||
+    elapsedRaw.includes('half time') ||
+    elapsedRaw.includes('1st') ||
+    elapsedRaw.includes('2nd') ||
+    /^\d+(\+\d+)?$/.test(elapsedRaw) ||
+    cardLive
+  ) {
+    const minute = /^\d+(\+\d+)?$/.test(elapsedRaw) ? `${elapsedRaw}'` : '';
+    return {
+      code: 'live',
+      label: minute ? `EN JUEGO · ${minute}` : 'EN JUEGO',
+      infoLabel: minute ? `En juego · ${minute}` : 'En juego',
+      minute
+    };
+  }
+
+  return { code: 'pending', label: 'PENDIENTE', infoLabel: 'Pendiente', minute: '' };
+}
+
+function getApiMatchScoreText(apiMatch, card = null) {
+  const home = apiMatch?.rev ? apiMatch?.away_score : apiMatch?.home_score;
+  const away = apiMatch?.rev ? apiMatch?.home_score : apiMatch?.away_score;
+
+  const hasHome = home !== undefined && home !== null && String(home).trim() !== '';
+  const hasAway = away !== undefined && away !== null && String(away).trim() !== '';
+
+  if (hasHome && hasAway) {
+    return `${Number(home)} - ${Number(away)}`;
+  }
+
+  return cleanScoreText(card?.querySelector?.('.scoreline')?.textContent?.trim() || 'vs');
+}
+
+function getScoreboardState(card, apiMatch = null) {
+  const normalized = normalizeApiMatchStatus(apiMatch, card);
+  const result = apiMatch ? getApiMatchScoreText(apiMatch, card) : cleanScoreText(card.querySelector('.scoreline')?.textContent?.trim());
+
+  return {
+    result,
+    status: normalized.label,
+    statusClass: normalized.code === 'finished' ? 'finished' : normalized.code === 'live' ? 'live' : 'pending'
+  };
 }
 
 function renderMatchScoreboard(card, team1, team2, logo1 = '', logo2 = '', apiMatch = null) {
@@ -4886,13 +4925,6 @@ function openMatchDetail(card) {
   const homeScorers = apiMatch ? parseScorers(apiMatch.rev ? rawMatch.away_scorers : rawMatch.home_scorers) : [];
   const awayScorers = apiMatch ? parseScorers(apiMatch.rev ? rawMatch.home_scorers : rawMatch.away_scorers) : [];
 
-  const expectedHomeGoals = apiMatch ? Number(apiMatch.rev ? rawMatch.away_score : rawMatch.home_score) : 0;
-  const expectedAwayGoals = apiMatch ? Number(apiMatch.rev ? rawMatch.home_score : rawMatch.away_score) : 0;
-
-  const scorersConsistent =
-    homeScorers.length === expectedHomeGoals &&
-    awayScorers.length === expectedAwayGoals;
-
   const stadiumId = rawMatch.stadium_id || apiMatch?.stadium_id || '';
   const stadium = stadiumId ? (STADIUMS_BY_ID[String(stadiumId)] || `Estadio ID ${stadiumId}`) : 'Pendiente';
   const state = isLive ? 'En juego' : isFinished ? 'Finalizado' : 'Pendiente';
@@ -4906,7 +4938,7 @@ function openMatchDetail(card) {
       <div class="detail-section-title">Información</div>
       <div class="detail-section-content">
         <div class="detail-grid">
-          ${renderDetailItem('Estado', minute ? `${state} · ${minute}` : state)}
+          ${renderDetailItem('Estado', state)}
           ${renderDetailItem('Fecha y hora', formatKickoff(card))}
           ${renderDetailItem('Grupo / Fase', getGroupOrStageFromCard(card))}
           ${renderDetailItem('Canal', card.dataset.channel || card.querySelector('.channel')?.textContent?.trim() || 'Pendiente')}
