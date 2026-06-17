@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v22.4</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -20,6 +20,7 @@ body {
 header { padding:26px 32px; color:white; background:linear-gradient(135deg,rgba(8,38,84,.92),rgba(4,95,255,.80)),linear-gradient(45deg,#07111f,#0b5fff); }
 h1 { margin:0; font-size:clamp(28px,4vw,54px); line-height:1; letter-spacing:-.04em; text-transform:uppercase; }
 .subtitle { margin-top:10px; font-size:18px; opacity:.92; }
+.deploy-version { margin-top:6px; display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border-radius:999px; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.24); color:rgba(255,255,255,.88); font-size:12px; font-weight:900; letter-spacing:.03em; }
 .legend { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; font-size:13px; font-weight:800; }
 .legend span { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.26); border-radius:999px; padding:6px 10px; }
 
@@ -85,6 +86,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
   header { padding:18px 16px 14px; position:sticky; top:0; z-index:10; box-shadow:0 6px 20px rgba(0,0,0,.18); }
   h1 { font-size:25px; letter-spacing:-.03em; }
   .subtitle { font-size:13px; line-height:1.35; }
+  .deploy-version { font-size:10px; padding:3px 7px; }
   .legend { margin-top:8px; font-size:10px; }
   .filters { grid-template-columns:1fr 1fr; gap:8px; padding:10px; position:sticky; top:116px; z-index:9; }
   .check-control, button { height:40px; }
@@ -108,6 +110,7 @@ footer { padding:14px 24px 22px; color:#475569; font-size:13px; background:#f8fa
   header { padding:8px 14px; position:sticky; top:0; z-index:10; }
   h1 { font-size:20px; }
   .subtitle { font-size:12px; margin-top:3px; }
+  .deploy-version { font-size:10px; margin-top:3px; padding:2px 6px; }
   .legend { display:none; }
   .filters { grid-template-columns:1fr 1fr 1fr auto auto auto auto; gap:7px; padding:7px 10px; position:sticky; top:55px; z-index:9; }
   .filter-control label, .check-control span { display:none; }
@@ -1247,13 +1250,14 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v22.3: corregido estado y marcador en detalle -->
+<!-- v22.4: modal corregida + estado robusto + versión visible -->
 </head>
 <body>
 <main class="page">
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
+    <div class="deploy-version" id="deployVersion">v22.4 · 17/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -4072,6 +4076,10 @@ const API_NAME_TO_LOCAL_TEAM = {
   'Portugal': 'Portugal',
   'DR Congo': 'RD Congo',
   'Congo DR': 'RD Congo',
+  'Democratic Republic of Congo': 'RD Congo',
+  'Democratic Republic of the Congo': 'RD Congo',
+  'Congo': 'RD Congo',
+  'COD': 'RD Congo',
   'England': 'Inglaterra',
   'Croatia': 'Croacia',
   'Ghana': 'Ghana',
@@ -4095,7 +4103,7 @@ const TEAM_ALIASES={
 'Cabo Verde':['cape verde','cabo verde'],'Bélgica':['belgium','belgica'],'Egipto':['egypt','egipto'],'Arabia Saudí':['saudi arabia','arabia saudi'],
 'Uruguay':['uruguay'],'Irán':['iran'],'Nueva Zelanda':['new zealand','nueva zelanda'],'Francia':['france','francia'],
 'Senegal':['senegal'],'Irak':['iraq','irak'],'Noruega':['norway','noruega'],'Argentina':['argentina'],'Argelia':['algeria','argelia'],
-'Austria':['austria'],'Jordania':['jordan','jordania'],'Portugal':['portugal'],'RD Congo':['dr congo','congo dr','rd congo','drc','congo'],
+'Austria':['austria'],'Jordania':['jordan','jordania'],'Portugal':['portugal'],'RD Congo':['dr congo','congo dr','rd congo','drc','congo','democratic republic of congo','democratic republic of the congo','congo kinshasa','cod'],
 'Inglaterra':['england','inglaterra'],'Croacia':['croatia','croacia'],'Ghana':['ghana'],'Panamá':['panama'],'Uzbekistán':['uzbekistan'],'Colombia':['colombia']
 };
 
@@ -4927,8 +4935,17 @@ function openMatchDetail(card) {
 
   const stadiumId = rawMatch.stadium_id || apiMatch?.stadium_id || '';
   const stadium = stadiumId ? (STADIUMS_BY_ID[String(stadiumId)] || `Estadio ID ${stadiumId}`) : 'Pendiente';
-  const state = isLive ? 'En juego' : isFinished ? 'Finalizado' : 'Pendiente';
-  const minute = cleanMatchMinute(apiMatch?.min || apiMatch?.time_elapsed);
+  const normalized = normalizeApiMatchStatus(apiMatch, card);
+  const state = normalized.infoLabel;
+  const minute = normalized.minute || cleanMatchMinute(apiMatch?.min || apiMatch?.time_elapsed);
+
+  const scoreForConsistency = apiMatch ? getApiMatchScoreText(apiMatch, card) : (scoreVisible || '');
+  const scoreMatch = String(scoreForConsistency).match(/(\d+)\s*-\s*(\d+)/);
+  const homeGoals = scoreMatch ? Number(scoreMatch[1]) : null;
+  const awayGoals = scoreMatch ? Number(scoreMatch[2]) : null;
+  const scorersConsistent = scoreMatch
+    ? homeScorers.length === homeGoals && awayScorers.length === awayGoals
+    : false;
 
   body.innerHTML = `
     ${scorersConsistent ? renderScorers(`Goles · ${team1Flag} ${team1}`.trim(), homeScorers) : ''}
