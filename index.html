@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v22.4</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v22.5</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1250,14 +1250,14 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v22.4: modal corregida + estado robusto + versión visible -->
+<!-- v22.5: modal corregida + estado robusto + versión visible -->
 </head>
 <body>
 <main class="page">
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v22.4 · 17/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v22.5 · 17/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -4209,9 +4209,23 @@ function applyCachedResults() {
   }
 }
 
+function detectLiveFromPayload(payload) {
+  return arr(payload).some(raw => norm(raw).st === 'live');
+}
+
+function getAutoRefreshSecondsFromResponse(res, payload) {
+  const headerSeconds = Number(res?.headers?.get?.('X-Results-Cache-Seconds'));
+  if (Number.isFinite(headerSeconds) && headerSeconds > 0) return headerSeconds;
+
+  const cfg = window.MUNDIAL_CONFIG || {};
+  return detectLiveFromPayload(payload)
+    ? Number(cfg.results_cache_seconds_live || 15)
+    : Number(cfg.results_cache_seconds_no_live || cfg.client_auto_refresh_seconds || 60);
+}
+
 async function updateResults(options = {}) {
   const forceRefresh = options.forceRefresh === true;
-  if (resultsFetchInProgress) return;
+  if (resultsFetchInProgress) return null;
   resultsFetchInProgress = true;
 
   try {
@@ -4231,6 +4245,12 @@ async function updateResults(options = {}) {
 
     const api = arr(payload);
     applyIndexedResults(indexApiMatches(api), 'Worker');
+
+    const nextRefreshSeconds = getAutoRefreshSecondsFromResponse(res, payload);
+    window.__worldCupNextRefreshSeconds = nextRefreshSeconds;
+    console.info(`[Mundial 2026] Próximo refresco automático en ${nextRefreshSeconds}s`);
+
+    return { payload, nextRefreshSeconds };
   } catch (e) {
     console.warn('[Mundial 2026] Error consultando resultados:', e);
     throw e;
@@ -4597,11 +4617,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     await updateResults({ forceRefresh: false });
   }
 
-  if (typeof updateResults === 'function' && !window.__worldCupResultsIntervalStarted) {
-    window.__worldCupResultsIntervalStarted = true;
-    setInterval(() => updateResults({ forceRefresh: false }).catch(e => console.warn('[Mundial 2026] Error en refresco automático:', e)), getClientAutoRefreshMs());
+  if (typeof updateResults === 'function' && !window.__worldCupResultsAutoRefreshStarted) {
+    window.__worldCupResultsAutoRefreshStarted = true;
+    scheduleNextResultsRefresh(window.__worldCupNextRefreshSeconds || Number(window.MUNDIAL_CONFIG?.client_auto_refresh_seconds || 60));
   }
 });
+
+function scheduleNextResultsRefresh(seconds) {
+  const safeSeconds = Math.max(5, Number(seconds || 60));
+
+  if (window.__worldCupResultsRefreshTimer) {
+    clearTimeout(window.__worldCupResultsRefreshTimer);
+  }
+
+  window.__worldCupResultsRefreshTimer = setTimeout(async () => {
+    try {
+      const result = await updateResults({ forceRefresh: false });
+      const nextSeconds = result?.nextRefreshSeconds || window.__worldCupNextRefreshSeconds || safeSeconds;
+      scheduleNextResultsRefresh(nextSeconds);
+    } catch (e) {
+      console.warn('[Mundial 2026] Error en refresco automático:', e);
+      scheduleNextResultsRefresh(Number(window.MUNDIAL_CONFIG?.client_auto_refresh_seconds || 60));
+    }
+  }, safeSeconds * 1000);
+}
 </script>
 
 
