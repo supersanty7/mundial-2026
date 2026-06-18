@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v22.5</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v22.6</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1250,14 +1250,14 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v22.5: modal corregida + estado robusto + versión visible -->
+<!-- v22.6: detalle sin goleadores por fuente no fiable -->
 </head>
 <body>
 <main class="page">
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v22.5 · 17/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v22.6 · 18/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -4969,27 +4969,13 @@ function openMatchDetail(card) {
   scoreBox.textContent = scoreVisible || 'Pendiente';
 
   const rawMatch = apiMatch?.raw || {};
-  const homeScorers = apiMatch ? parseScorers(apiMatch.rev ? rawMatch.away_scorers : rawMatch.home_scorers) : [];
-  const awayScorers = apiMatch ? parseScorers(apiMatch.rev ? rawMatch.home_scorers : rawMatch.away_scorers) : [];
 
   const stadiumId = rawMatch.stadium_id || apiMatch?.stadium_id || '';
   const stadium = stadiumId ? (STADIUMS_BY_ID[String(stadiumId)] || `Estadio ID ${stadiumId}`) : 'Pendiente';
   const normalized = normalizeApiMatchStatus(apiMatch, card);
   const state = normalized.infoLabel;
-  const minute = normalized.minute || cleanMatchMinute(apiMatch?.min || apiMatch?.time_elapsed);
-
-  const scoreForConsistency = apiMatch ? getApiMatchScoreText(apiMatch, card) : (scoreVisible || '');
-  const scoreMatch = String(scoreForConsistency).match(/(\d+)\s*-\s*(\d+)/);
-  const homeGoals = scoreMatch ? Number(scoreMatch[1]) : null;
-  const awayGoals = scoreMatch ? Number(scoreMatch[2]) : null;
-  const scorersConsistent = scoreMatch
-    ? homeScorers.length === homeGoals && awayScorers.length === awayGoals
-    : false;
 
   body.innerHTML = `
-    ${scorersConsistent ? renderScorers(`Goles · ${team1Flag} ${team1}`.trim(), homeScorers) : ''}
-    ${scorersConsistent ? renderScorers(`Goles · ${team2Flag} ${team2}`.trim(), awayScorers) : ''}
-
     <section class="detail-section">
       <div class="detail-section-title">Información</div>
       <div class="detail-section-content">
