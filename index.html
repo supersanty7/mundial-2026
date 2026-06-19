@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v22.6</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v22.7</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1250,14 +1250,14 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v22.6: detalle sin goleadores por fuente no fiable -->
+<!-- v22.7: caché rápida + refresco inteligente -->
 </head>
 <body>
 <main class="page">
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v22.6 · 18/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v22.7 · 19/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -4214,8 +4214,11 @@ function detectLiveFromPayload(payload) {
 }
 
 function getAutoRefreshSecondsFromResponse(res, payload) {
-  const headerSeconds = Number(res?.headers?.get?.('X-Results-Cache-Seconds'));
-  if (Number.isFinite(headerSeconds) && headerSeconds > 0) return headerSeconds;
+  const nextHeaderSeconds = Number(res?.headers?.get?.('X-Results-Next-Check-Seconds'));
+  if (Number.isFinite(nextHeaderSeconds) && nextHeaderSeconds > 0) return nextHeaderSeconds;
+
+  const cacheHeaderSeconds = Number(res?.headers?.get?.('X-Results-Cache-Seconds'));
+  if (Number.isFinite(cacheHeaderSeconds) && cacheHeaderSeconds > 0) return cacheHeaderSeconds;
 
   const cfg = window.MUNDIAL_CONFIG || {};
   return detectLiveFromPayload(payload)
@@ -4594,11 +4597,15 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadResultsFromWorkerFirst() {
   if (typeof updateResults !== 'function') return;
 
+  // Pintar primero la caché local evita una pantalla sin resultados mientras responde el Worker.
+  if (typeof applyCachedResults === 'function') {
+    applyCachedResults();
+  }
+
   try {
     await updateResults({ forceRefresh: false });
   } catch (e) {
-    console.warn('[Mundial 2026] No se pudo recuperar del Worker; usando caché local si existe:', e);
-    if (typeof applyCachedResults === 'function') applyCachedResults();
+    console.warn('[Mundial 2026] No se pudo recuperar del Worker; se mantiene la caché local si existe:', e);
   }
 }
 </script>
@@ -5112,7 +5119,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
       if (typeof updateResults === 'function') {
-        await updateResults({ forceRefresh: true });
+        const result = await updateResults({ forceRefresh: true });
+        if (typeof scheduleNextResultsRefresh === 'function') {
+          const nextSeconds = result?.nextRefreshSeconds || window.__worldCupNextRefreshSeconds || Number(window.MUNDIAL_CONFIG?.client_auto_refresh_seconds || 60);
+          scheduleNextResultsRefresh(nextSeconds);
+        }
       }
     } catch (e) {
       console.warn('[Mundial 2026] Error en refresco manual:', e);
