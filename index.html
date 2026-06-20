@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v22.7</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v22.8</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1250,14 +1250,14 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v22.7: caché rápida + refresco inteligente -->
+<!-- v22.8: caché rápida + refresco forzado inicial -->
 </head>
 <body>
 <main class="page">
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v22.7 · 19/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v22.8 · 20/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -4593,26 +4593,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 <script>
-/* v22.1: caché local solo como fallback si falla el Worker */
+/* v22.8: primera carga desde caché + refresco forzado inicial */
 async function loadResultsFromWorkerFirst() {
   if (typeof updateResults !== 'function') return;
 
-  // Pintar primero la caché local evita una pantalla sin resultados mientras responde el Worker.
+  // 1) Pintar primero la caché local para evitar pantalla vacía.
   if (typeof applyCachedResults === 'function') {
     applyCachedResults();
   }
 
+  // 2) Pedir al Worker su caché actual. Esto debería responder rápido.
   try {
     await updateResults({ forceRefresh: false });
   } catch (e) {
-    console.warn('[Mundial 2026] No se pudo recuperar del Worker; se mantiene la caché local si existe:', e);
+    console.warn('[Mundial 2026] No se pudo recuperar la caché del Worker; se mantiene la caché local si existe:', e);
+  }
+
+  // 3) Justo después de pintar la primera carga, forzar recuperación real del upstream.
+  //    No se limpian resultados mientras carga: se reemplazan solo si llega una respuesta válida.
+  try {
+    const forced = await updateResults({ forceRefresh: true });
+    if (forced?.nextRefreshSeconds) {
+      window.__worldCupNextRefreshSeconds = forced.nextRefreshSeconds;
+    }
+  } catch (e) {
+    console.warn('[Mundial 2026] Falló el refresco inicial forzado; se mantiene la información ya mostrada:', e);
   }
 }
 </script>
 
 
 <script>
-/* v22.1: inicializador priorizando caché del Worker */
+/* v22.8: inicializador caché primero, upstream después */
 document.addEventListener('DOMContentLoaded', async () => {
   if (typeof loadMundialRemoteConfig === 'function') {
     await loadMundialRemoteConfig();
