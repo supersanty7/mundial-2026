@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v22.8</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v22.9</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1223,6 +1223,15 @@ to { transform: rotate(360deg); }
   }
 }
 
+
+
+/* v22.9: resaltar próximo partido al centrar scroll */
+.match.next-kickoff-focus {
+  outline: 3px solid rgba(11, 95, 255, .45);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(11, 95, 255, .12), 0 12px 28px rgba(15, 23, 42, .16);
+}
+
 </style>
 
 
@@ -1250,14 +1259,14 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v22.8: caché rápida + refresco forzado inicial -->
+<!-- v22.9: caché rápida + refresco forzado inicial -->
 </head>
 <body>
 <main class="page">
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v22.8 · 20/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v22.9 · 20/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -4593,7 +4602,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 <script>
-/* v22.8: primera carga desde caché + refresco forzado inicial */
+/* v22.9: primera carga desde caché + refresco forzado inicial */
 async function loadResultsFromWorkerFirst() {
   if (typeof updateResults !== 'function') return;
 
@@ -4624,7 +4633,7 @@ async function loadResultsFromWorkerFirst() {
 
 
 <script>
-/* v22.8: inicializador caché primero, upstream después */
+/* v22.9: inicializador caché primero, upstream después */
 document.addEventListener('DOMContentLoaded', async () => {
   if (typeof loadMundialRemoteConfig === 'function') {
     await loadMundialRemoteConfig();
@@ -5213,6 +5222,93 @@ window.addEventListener('resize', () => {
     window.updateResultsUpdatedLabel(window.__lastResultsUpdatedAt);
   }
 });
+</script>
+
+
+<script>
+/* v22.9: centrar automáticamente el próximo partido */
+(function() {
+  let nextKickoffScrollDone = false;
+
+  function isElementVisible(el) {
+    if (!el) return false;
+    if (!el.getClientRects || el.getClientRects().length === 0) return false;
+
+    let node = el;
+    while (node && node !== document.body) {
+      const style = window.getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+      node = node.parentElement;
+    }
+
+    return true;
+  }
+
+  function getUpcomingMatchCards() {
+    const now = Date.now();
+
+    return Array.from(document.querySelectorAll('.match[data-kickoff]'))
+      .map(card => {
+        const kickoff = new Date(card.dataset.kickoff || '');
+        return { card, time: kickoff.getTime() };
+      })
+      .filter(item => Number.isFinite(item.time) && item.time >= now)
+      .sort((a, b) => a.time - b.time);
+  }
+
+  function getFallbackLatestMatchCard() {
+    const cards = Array.from(document.querySelectorAll('.match[data-kickoff]'))
+      .map(card => {
+        const kickoff = new Date(card.dataset.kickoff || '');
+        return { card, time: kickoff.getTime() };
+      })
+      .filter(item => Number.isFinite(item.time))
+      .sort((a, b) => b.time - a.time);
+
+    return cards[0]?.card || null;
+  }
+
+  function findVisibleTwin(card) {
+    if (!card) return null;
+    const key = card.dataset.resultKey;
+    const selector = key
+      ? `.match[data-result-key="${CSS.escape(key)}"]`
+      : `.match[data-kickoff="${CSS.escape(card.dataset.kickoff || '')}"]`;
+
+    return Array.from(document.querySelectorAll(selector)).find(isElementVisible) || card;
+  }
+
+  window.scrollToNextKickoffMatch = function(options = {}) {
+    if (nextKickoffScrollDone && !options.force) return false;
+
+    const upcoming = getUpcomingMatchCards();
+    const targetBase = upcoming[0]?.card || getFallbackLatestMatchCard();
+    const target = findVisibleTwin(targetBase);
+
+    if (!target) return false;
+
+    document.querySelectorAll('.match.next-kickoff-focus').forEach(el => {
+      el.classList.remove('next-kickoff-focus');
+    });
+    target.classList.add('next-kickoff-focus');
+
+    requestAnimationFrame(() => {
+      target.scrollIntoView({
+        behavior: options.instant ? 'auto' : 'smooth',
+        block: 'center',
+        inline: 'nearest'
+      });
+    });
+
+    nextKickoffScrollDone = true;
+    return true;
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // Espera a que se apliquen layout responsive y resultados cacheados iniciales.
+    setTimeout(() => window.scrollToNextKickoffMatch({ instant: false }), 700);
+  });
+})();
 </script>
 
 </body>
