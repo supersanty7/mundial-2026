@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.1</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.2</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1267,14 +1267,14 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v23.1: eliminatorias automáticas + caché rápida + refresco forzado inicial -->
+<!-- v23.2: eliminatorias desde API con parche directo de vista y calendario -->
 </head>
 <body>
 <main class="page">
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v23.1 · 27/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v23.2 · 27/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -5787,6 +5787,256 @@ window.addEventListener('resize', () => {
     // Espera a que se apliquen layout responsive y resultados cacheados iniciales.
     setTimeout(() => window.scrollToNextKickoffMatch({ instant: false }), 700);
   });
+})();
+</script>
+
+
+
+<script>
+/* v23.2: parche directo para rellenar dieciseisavos/eliminatorias desde worldcup26.ir
+   Prioridad: home_team_name_en / away_team_name_en del JSON. Fallback: labels. */
+(function(){
+  const API_ID_BY_CODE = {
+    'R32-1':'73',  'R32-2':'76',  'R32-3':'74',  'R32-4':'75',
+    'R32-5':'78',  'R32-6':'77',  'R32-7':'79',  'R32-8':'80',
+    'R32-9':'82',  'R32-10':'81', 'R32-11':'84', 'R32-12':'83',
+    'R32-13':'85', 'R32-14':'88', 'R32-15':'86', 'R32-16':'87',
+    'R16-1':'90',  'R16-2':'89',  'R16-3':'91',  'R16-4':'92',
+    'R16-5':'93',  'R16-6':'94',  'R16-7':'95',  'R16-8':'96',
+    'QF-1':'97',   'QF-2':'98',   'QF-3':'99',   'QF-4':'100',
+    'SF-1':'101',  'SF-2':'102',  '3P':'103',    'F':'104'
+  };
+  const CODE_BY_API_ID = Object.fromEntries(Object.entries(API_ID_BY_CODE).map(([c,id]) => [String(id), c]));
+
+  function gamesFromCache() {
+    if (Array.isArray(window.__lastMundialApiGames) && window.__lastMundialApiGames.length) return window.__lastMundialApiGames;
+    try {
+      const payload = JSON.parse(localStorage.getItem(window.RESULTS_CACHE_KEY || 'mundial2026_results_cache_v1') || '{}');
+      if (typeof window.arr === 'function') return window.arr(payload);
+      if (Array.isArray(payload)) return payload;
+      return Array.isArray(payload.games) ? payload.games : [];
+    } catch { return []; }
+  }
+
+  function gameByApiId(id) {
+    return gamesFromCache().find(g => String(g?.id || '') === String(id || '')) || null;
+  }
+
+  function codeFromCard(card) {
+    return String(card?.dataset?.resultKey || '').split('|').pop().trim();
+  }
+
+  function localName(name) {
+    if (!name) return '';
+    try {
+      if (typeof window.apiNameToLocal === 'function') return window.apiNameToLocal(name);
+      if (typeof apiNameToLocal === 'function') return apiNameToLocal(name);
+    } catch {}
+    const map = {
+      'Mexico':'México','South Africa':'Sudáfrica','South Korea':'Corea del Sur','Czech Republic':'República Checa','Czechia':'República Checa',
+      'Canada':'Canadá','Bosnia and Herzegovina':'Bosnia y Herzegovina','Qatar':'Qatar','Switzerland':'Suiza',
+      'Brazil':'Brasil','Morocco':'Marruecos','Haiti':'Haití','Scotland':'Escocia',
+      'United States':'Estados Unidos','USA':'Estados Unidos','Paraguay':'Paraguay','Australia':'Australia','Turkey':'Turquía',
+      'Germany':'Alemania','Curaçao':'Curazao','Curacao':'Curazao','Ivory Coast':'Costa de Marfil','Ecuador':'Ecuador',
+      'Netherlands':'Países Bajos','Japan':'Japón','Sweden':'Suecia','Tunisia':'Túnez',
+      'Belgium':'Bélgica','Egypt':'Egipto','Iran':'Irán','New Zealand':'Nueva Zelanda',
+      'Spain':'España','Cape Verde':'Cabo Verde','Saudi Arabia':'Arabia Saudí','Uruguay':'Uruguay',
+      'France':'Francia','Senegal':'Senegal','Iraq':'Irak','Norway':'Noruega',
+      'Argentina':'Argentina','Algeria':'Argelia','Austria':'Austria','Jordan':'Jordania',
+      'Portugal':'Portugal','Democratic Republic of the Congo':'RD Congo','DR Congo':'RD Congo','Uzbekistan':'Uzbekistán','Colombia':'Colombia',
+      'England':'Inglaterra','Croatia':'Croacia','Ghana':'Ghana','Panama':'Panamá'
+    };
+    return map[String(name).trim()] || String(name).trim();
+  }
+
+  function realTeam(raw, side) {
+    if (!raw) return '';
+    const id = String(raw?.[`${side}_team_id`] ?? '').trim();
+    const name = String(raw?.[`${side}_team_name_en`] ?? '').trim();
+    if (!name || id === '0' || id.toLowerCase() === 'null') return '';
+    return localName(name);
+  }
+
+  function localLabel(label) {
+    const text = String(label || '').trim();
+    if (!text) return '';
+    let m = text.match(/^Winner Group\s+([A-L])$/i); if (m) return `1º Grupo ${m[1].toUpperCase()}`;
+    m = text.match(/^Runner-up Group\s+([A-L])$/i); if (m) return `2º Grupo ${m[1].toUpperCase()}`;
+    m = text.match(/^3rd Group\s+(.+)$/i); if (m) return `3º Grupo ${m[1].toUpperCase()}`;
+    m = text.match(/^Winner Match\s+(\d+)$/i); if (m) return `Ganador ${CODE_BY_API_ID[m[1]] || 'Match ' + m[1]}`;
+    m = text.match(/^Loser Match\s+(\d+)$/i); if (m) return `Perdedor ${CODE_BY_API_ID[m[1]] || 'Match ' + m[1]}`;
+    return text;
+  }
+
+  function score(raw) {
+    if (!raw) return '';
+    const hs = raw.home_score, as = raw.away_score;
+    if (hs === undefined || as === undefined || hs === null || as === null) return '';
+    if (String(hs).toLowerCase() === 'null' || String(as).toLowerCase() === 'null') return '';
+    return `${Number(hs)} - ${Number(as)}`;
+  }
+
+  function status(raw) {
+    const finished = String(raw?.finished || '').toLowerCase();
+    const elapsed = String(raw?.time_elapsed || '').toLowerCase();
+    if (finished === 'true' || ['finished','finish','fulltime','full time','ft'].includes(elapsed)) return 'finished';
+    if (elapsed === 'live' || elapsed === 'playing' || /^\d+(\+\d+)?$/.test(elapsed)) return 'live';
+    return 'scheduled';
+  }
+
+  function flag(team) {
+    try { if (typeof TEAM_EMOJI !== 'undefined' && TEAM_EMOJI[team]) return TEAM_EMOJI[team]; } catch {}
+    return '🏳️';
+  }
+
+  function setCardTeam(card, side, team) {
+    if (!card || !team) return;
+    const node = card.querySelectorAll('.teams .team')[side === 1 ? 0 : 1];
+    if (!node) return;
+    node.querySelector('.flag')?.replaceChildren(document.createTextNode(flag(team)));
+    const f = node.querySelector('.flag');
+    if (f) f.setAttribute('aria-label', `Bandera ${team}`);
+    const b = node.querySelector('b');
+    if (b) b.textContent = team;
+    card.dataset[side === 1 ? 'team1' : 'team2'] = team;
+  }
+
+  function setCardScore(card, raw) {
+    const txt = score(raw);
+    const st = status(raw);
+    if (!txt || (st !== 'live' && st !== 'finished')) return;
+    const scoreEl = card.querySelector('.scoreline');
+    if (!scoreEl) return;
+    card.classList.add('has-score');
+    card.classList.toggle('live-match', st === 'live');
+    card.classList.toggle('finished-match', st === 'finished');
+    scoreEl.textContent = txt;
+  }
+
+  function cardParticipantsFromApi(code) {
+    const raw = gameByApiId(API_ID_BY_CODE[code]);
+    const t1 = realTeam(raw, 'home');
+    const t2 = realTeam(raw, 'away');
+    return {
+      raw,
+      team1: t1,
+      team2: t2,
+      label1: t1 || localLabel(raw?.home_team_label) || 'Equipo pendiente',
+      label2: t2 || localLabel(raw?.away_team_label) || 'Equipo pendiente'
+    };
+  }
+
+  function applyApiTeamsToKnockoutCards() {
+    let resolved = 0;
+    document.querySelectorAll('.match.knockout-pending').forEach(card => {
+      const code = codeFromCard(card);
+      if (!API_ID_BY_CODE[code]) return;
+      const r = cardParticipantsFromApi(code);
+      if (r.team1) setCardTeam(card, 1, r.team1);
+      if (r.team2) setCardTeam(card, 2, r.team2);
+      if (r.raw) setCardScore(card, r.raw);
+      card.classList.toggle('knockout-resolved', !!(r.team1 && r.team2));
+      if (r.team1 && r.team2) resolved++;
+    });
+    console.info(`[Mundial 2026] v23.2 cruces desde API aplicados en calendario: ${resolved}`);
+    return resolved;
+  }
+
+  function winnerForApiId(id, loser = false, seen = new Set()) {
+    const raw = gameByApiId(id);
+    if (!raw || seen.has(`${id}:${loser ? 'L' : 'W'}`)) return '';
+    seen.add(`${id}:${loser ? 'L' : 'W'}`);
+    if (status(raw) !== 'finished') return '';
+    const sc = score(raw).match(/(\d+)\s*-\s*(\d+)/);
+    if (!sc) return '';
+    const h = Number(sc[1]), a = Number(sc[2]);
+    if (h === a) return '';
+    const code = CODE_BY_API_ID[String(id)] || '';
+    const p = code ? cardParticipantsFromApi(code) : { team1: realTeam(raw, 'home'), team2: realTeam(raw, 'away') };
+    if (!p.team1 || !p.team2) return '';
+    const homeWon = h > a;
+    return loser ? (homeWon ? p.team2 : p.team1) : (homeWon ? p.team1 : p.team2);
+  }
+
+  function resolveLabelMaybe(label) {
+    const text = String(label || '').trim();
+    let m = text.match(/^Winner Match\s+(\d+)$/i); if (m) return winnerForApiId(m[1], false);
+    m = text.match(/^Loser Match\s+(\d+)$/i); if (m) return winnerForApiId(m[1], true);
+    return '';
+  }
+
+  function renderApiFirstKnockouts() {
+    const box = document.getElementById('knockoutView');
+    if (!box || typeof KNOCKOUT_STRUCTURE === 'undefined') return;
+    applyApiTeamsToKnockoutCards();
+
+    box.innerHTML = KNOCKOUT_STRUCTURE.map(round => `
+      <section class="knockout-round">
+        <div class="knockout-title">${round.title}</div>
+        <div class="knockout-list">
+          ${round.matches.map(([code]) => {
+            const raw = gameByApiId(API_ID_BY_CODE[code]);
+            const fromApi = cardParticipantsFromApi(code);
+            const resolved1 = fromApi.team1 || resolveLabelMaybe(raw?.home_team_label);
+            const resolved2 = fromApi.team2 || resolveLabelMaybe(raw?.away_team_label);
+            const t1 = resolved1 || fromApi.label1;
+            const t2 = resolved2 || fromApi.label2;
+            const both = !!(resolved1 && resolved2);
+            const sc = score(raw);
+            const w = raw ? winnerForApiId(raw.id, false) : '';
+            return `
+              <article class="knockout-match">
+                <div class="knockout-code">${code}</div>
+                <div>
+                  <div class="knockout-teams ${both ? 'resolved' : 'empty'}">
+                    ${resolved1 ? `${flag(resolved1)} ${t1}` : t1}
+                    vs
+                    ${resolved2 ? `${flag(resolved2)} ${t2}` : t2}
+                    ${sc && status(raw) !== 'scheduled' ? `<strong> · ${sc}</strong>` : '<span class="knockout-score-empty" aria-label="resultado pendiente"></span>'}
+                  </div>
+                  <div class="knockout-meta ${both ? 'resolved' : 'pending'}">
+                    ${w ? `Clasificado: ${flag(w)} ${w}` : both ? 'Cruce recibido desde API' : 'Pendiente de API / clasificación'}
+                  </div>
+                </div>
+              </article>`;
+          }).join('')}
+        </div>
+      </section>`).join('');
+  }
+
+  window.applyApiTeamsToKnockoutCardsV232 = applyApiTeamsToKnockoutCards;
+  window.renderApiFirstKnockoutsV232 = renderApiFirstKnockouts;
+
+  function refreshNow() {
+    applyApiTeamsToKnockoutCards();
+    if (document.getElementById('knockoutView')?.classList.contains('active')) renderApiFirstKnockouts();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(refreshNow, 100);
+    setTimeout(refreshNow, 1000);
+    setTimeout(refreshNow, 3000);
+
+    document.getElementById('knockoutBtn')?.addEventListener('click', () => {
+      setTimeout(renderApiFirstKnockouts, 0);
+      setTimeout(renderApiFirstKnockouts, 250);
+    });
+  });
+
+  const wrapLater = () => {
+    const oldUpdate = window.updateResults;
+    if (typeof oldUpdate === 'function' && !oldUpdate.__apiKoV232Wrapped) {
+      const wrapped = async function(...args) {
+        const out = await oldUpdate.apply(this, args);
+        setTimeout(refreshNow, 0);
+        return out;
+      };
+      wrapped.__apiKoV232Wrapped = true;
+      window.updateResults = wrapped;
+    }
+  };
+  wrapLater();
+  setTimeout(wrapLater, 0);
 })();
 </script>
 
