@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.5</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.6</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1234,7 +1234,7 @@ to { transform: rotate(360deg); }
 
 
 
-/* v23.5: eliminatorias resueltas automáticamente */
+/* v23.6: eliminatorias resueltas automáticamente */
 .match.knockout-resolved{border-color:#22c55e!important;border-left-color:#16a34a!important;background:#f0fdf4!important}
 .match.knockout-resolved .knockout-day-label{background:#dcfce7;color:#166534}
 .knockout-teams.resolved{color:#0f172a!important;font-style:normal!important;font-weight:950}
@@ -1267,14 +1267,14 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v23.5: eliminatorias desde API con parche directo de vista y calendario -->
+<!-- v23.6: eliminatorias desde API con parche directo de vista y calendario -->
 </head>
 <body>
 <main class="page">
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v23.5 · 28/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v23.6 · 28/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -3976,47 +3976,78 @@ const spainOnly = document.getElementById('spainOnly');
 const clearFilters = document.getElementById('clearFilters');
 const resultsInfo = document.getElementById('resultsInfo');
 
+function buildFastFilterIndex() {
+  const items = Array.from(document.querySelectorAll('.match')).map((el, idx) => {
+    const section = el.closest('[data-date-section]');
+    return { el, section, idx };
+  });
+
+  const sectionMap = new Map();
+  items.forEach(item => {
+    if (!item.section) return;
+    if (!sectionMap.has(item.section)) {
+      sectionMap.set(item.section, { section: item.section, total: 0, visible: 0 });
+    }
+    sectionMap.get(item.section).total++;
+  });
+
+  const sections = Array.from(sectionMap.values());
+  items.forEach(item => { item.sectionInfo = item.section ? sectionMap.get(item.section) : null; });
+
+  window.__mundialFastFilterIndex = { items, sections };
+  return window.__mundialFastFilterIndex;
+}
+
+function getFastFilterIndex() {
+  const index = window.__mundialFastFilterIndex;
+  if (!index || !Array.isArray(index.items) || index.items.length !== document.querySelectorAll('.match').length) {
+    return buildFastFilterIndex();
+  }
+  return index;
+}
+
 function applyFilters() {
   const team = teamFilter.value;
   const date = dateFilter.value;
   const channel = channelFilter.value;
   const onlySpain = spainOnly.checked;
-  const matches = document.querySelectorAll('.match');
-  let visible = 0;
-  const visibleSet = new Set();
+  const active = !!(team || date || channel || onlySpain);
 
-  matches.forEach(match => {
-    const team1 = match.dataset.team1;
-    const team2 = match.dataset.team2;
-    const matchDate = match.dataset.date;
-    const matchChannel = match.dataset.channel;
-    const isSpain = match.dataset.spain === '1';
+  const index = getFastFilterIndex();
+  const visibleKeys = new Set();
 
+  index.sections.forEach(s => { s.visible = 0; });
+
+  for (const item of index.items) {
+    const el = item.el;
+    const d = el.dataset;
+
+    // Lectura solo desde dataset. No se inspecciona texto ni se buscan nodos internos.
     const show =
-      (!team || team1 === team || team2 === team) &&
-      (!date || matchDate === date) &&
-      (!channel || matchChannel === channel) &&
-      (!onlySpain || isSpain);
+      (!team || d.team1 === team || d.team2 === team) &&
+      (!date || d.date === date) &&
+      (!channel || d.channel === channel) &&
+      (!onlySpain || d.spain === '1' || d.team1 === 'España' || d.team2 === 'España' || d.team1 === 'Spain' || d.team2 === 'Spain');
 
-    match.classList.toggle('hidden-filter', !show);
+    el.classList.toggle('hidden-filter', !show);
+
     if (show) {
-      const key = `${matchDate}|${team1}|${team2}|${matchChannel}`;
-      visibleSet.add(key);
+      const key = `${d.date || ''}|${d.team1 || ''}|${d.team2 || ''}|${d.channel || ''}`;
+      visibleKeys.add(key);
+      if (item.sectionInfo) item.sectionInfo.visible++;
     }
-  });
+  }
 
-  visible = visibleSet.size;
+  for (const s of index.sections) {
+    s.section.classList.toggle('hidden-filter', s.total > 0 && s.visible === 0);
+  }
 
-  document.querySelectorAll('[data-date-section]').forEach(section => {
-    const visibleMatches = section.querySelectorAll('.match:not(.hidden-filter)').length;
-    const hasMatches = section.querySelectorAll('.match').length > 0;
-    section.classList.toggle('hidden-filter', hasMatches && visibleMatches === 0);
-  });
-
-  const active = team || date || channel || onlySpain;
+  const visible = visibleKeys.size;
   resultsInfo.style.display = active ? 'block' : 'none';
   resultsInfo.textContent = active ? `${visible} partido${visible === 1 ? '' : 's'} encontrados` : '';
 }
+
+window.rebuildFastFilterIndex = buildFastFilterIndex;
 
 [teamFilter, dateFilter, channelFilter, spainOnly].forEach(el => el.addEventListener('change', applyFilters));
 clearFilters.addEventListener('click', () => {
@@ -4628,7 +4659,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 <script>
-/* v23.5: eliminatorias desde worldcup26.ir primero; fallback automático si faltan equipos */
+/* v23.6: eliminatorias desde worldcup26.ir primero; fallback automático si faltan equipos */
 (function(){
   const GROUP_PLACEHOLDER_RE = /^(1º|2º|3º)\s+Grupo\s+(.+)$/i;
   const WINNER_PLACEHOLDER_RE = /^Ganador\s+(.+)$/i;
@@ -5794,7 +5825,7 @@ window.addEventListener('resize', () => {
 
 
 <script>
-/* v23.5: parche directo para rellenar dieciseisavos/eliminatorias desde worldcup26.ir
+/* v23.6: parche directo para rellenar dieciseisavos/eliminatorias desde worldcup26.ir
    Prioridad: home_team_name_en / away_team_name_en del JSON. Fallback: labels. */
 (function(){
   const API_ID_BY_CODE = {
@@ -5939,7 +5970,7 @@ window.addEventListener('resize', () => {
       card.classList.toggle('knockout-resolved', !!(r.team1 && r.team2));
       if (r.team1 && r.team2) resolved++;
     });
-    console.info(`[Mundial 2026] v23.5 cruces desde API aplicados en calendario: ${resolved}`);
+    console.info(`[Mundial 2026] v23.6 cruces desde API aplicados en calendario: ${resolved}`);
     return resolved;
   }
 
@@ -6044,7 +6075,7 @@ window.addEventListener('resize', () => {
 
 
 <script>
-/* v23.5: parche robusto para cruces de eliminatorias usando directamente IDs de worldcup26.ir.
+/* v23.6: parche robusto para cruces de eliminatorias usando directamente IDs de worldcup26.ir.
    Soluciona casos como España-Austria (API id 84 / código R32-11) aunque la vista antigua
    no se haya repintado o updateResults no quede correctamente envuelto. */
 (function(){
@@ -6202,7 +6233,7 @@ window.addEventListener('resize', () => {
       if (updateOneCard(card, game)) updated++;
     });
     try { if (typeof applyFilters === 'function') applyFilters(); } catch {}
-    console.info(`[Mundial 2026] v23.5 cruces aplicados desde API: ${updated}`);
+    console.info(`[Mundial 2026] v23.6 cruces aplicados desde API: ${updated}`);
     return updated;
   }
 
@@ -6278,7 +6309,7 @@ window.addEventListener('resize', () => {
       applyKnockoutsFromGames(games);
       if (document.getElementById('knockoutView')?.classList.contains('active')) renderKnockoutViewV233();
     } catch(e) {
-      console.warn('[Mundial 2026] v23.5 no pudo refrescar cruces:', e);
+      console.warn('[Mundial 2026] v23.6 no pudo refrescar cruces:', e);
     }
   }
 
@@ -6314,7 +6345,7 @@ window.addEventListener('resize', () => {
 
 
 <script>
-/* v23.5: canales automáticos aislados - España RTVE / DAZN, resto DAZN */
+/* v23.6: canales automáticos aislados - España RTVE / DAZN, resto DAZN */
 (function() {
   function normChannelTeam(value) {
     return String(value || '')
