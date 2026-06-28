@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.3</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.4</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1266,7 +1266,7 @@ to { transform: rotate(360deg); }
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v23.3 · 28/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v23.4 · 28/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -3606,10 +3606,10 @@ to { transform: rotate(360deg); }
           <span class="mobile-weekday">Sáb</span>
         </div>
         <div class="mobile-matches">
-          <div class="knockout-day-label">04/07/2026 · Octavos</div>
+          <div class="knockout-day-label">04/07/2026 · Dieciseisavos / Octavos</div>
           
-      <article class="match knockout-pending phase-r16" data-kickoff="2026-07-04T00:00:00+02:00" data-result-key="2026-07-04|R32-15" data-date="2026-07-04" data-team1="1º Grupo J" data-team2="2º Grupo H" data-channel="DAZN" data-spain="0" data-stage="Octavos">
-        <div class="match-time">00:00 <span class="group mobile-hidden">Octavos</span></div>
+      <article class="match knockout-pending phase-r16" data-kickoff="2026-07-04T00:00:00+02:00" data-result-key="2026-07-04|R32-15" data-date="2026-07-04" data-team1="1º Grupo J" data-team2="2º Grupo H" data-channel="DAZN" data-spain="0" data-stage="Dieciseisavos">
+        <div class="match-time">00:00 <span class="group mobile-hidden">Dieciseisavos</span></div>
         <div class="teams">
           <span class="team"><span class="flag" aria-label="Equipo pendiente" role="img">🏳️</span> <b>1º Grupo J</b></span>
           <span class="vs">vs</span>
@@ -3619,8 +3619,8 @@ to { transform: rotate(360deg); }
         <div class="channel">DAZN</div>
       </article>
     
-      <article class="match knockout-pending phase-r16" data-kickoff="2026-07-04T03:30:00+02:00" data-result-key="2026-07-04|R32-16" data-date="2026-07-04" data-team1="1º Grupo K" data-team2="3º Grupo D/E/I/J/L" data-channel="DAZN" data-spain="0" data-stage="Octavos">
-        <div class="match-time">03:30 <span class="group mobile-hidden">Octavos</span></div>
+      <article class="match knockout-pending phase-r16" data-kickoff="2026-07-04T03:30:00+02:00" data-result-key="2026-07-04|R32-16" data-date="2026-07-04" data-team1="1º Grupo K" data-team2="3º Grupo D/E/I/J/L" data-channel="DAZN" data-spain="0" data-stage="Dieciseisavos">
+        <div class="match-time">03:30 <span class="group mobile-hidden">Dieciseisavos</span></div>
         <div class="teams">
           <span class="team"><span class="flag" aria-label="Equipo pendiente" role="img">🏳️</span> <b>1º Grupo K</b></span>
           <span class="vs">vs</span>
@@ -5167,6 +5167,117 @@ function updateKnockoutCardFromCandidate(card, item) {
     }
   }
   return true;
+}
+</script>
+
+<script>
+/* v23.4: eliminatorias por fixture canónico (Google/Worker) antes que por seed.
+   La app ya contiene las tarjetas con hora Madrid correcta. El JSON del Worker decide qué equipos
+   van en cada cruce, pero no debe recolocar Marruecos-Países Bajos, Portugal-Croacia o Colombia-Ghana
+   en otra tarjeta por ambigüedades de fecha/hora o seed. */
+const CANONICAL_R32_FIXTURES = [
+  { code:'R32-1',  teams:['Sudáfrica','Canadá'] },
+  { code:'R32-2',  teams:['Brasil','Japón'] },
+  { code:'R32-3',  teams:['Alemania','Paraguay'] },
+  { code:'R32-4',  teams:['Países Bajos','Marruecos'] },
+  { code:'R32-5',  teams:['Costa de Marfil','Noruega'] },
+  { code:'R32-6',  teams:['Francia','Suecia'] },
+  { code:'R32-7',  teams:['México','Ecuador'] },
+  { code:'R32-8',  teams:['Inglaterra','RD Congo'] },
+  { code:'R32-9',  teams:['Bélgica','Senegal'] },
+  { code:'R32-10', teams:['Estados Unidos','Bosnia y Herzegovina'] },
+  { code:'R32-11', teams:['España','Austria'] },
+  { code:'R32-12', teams:['Portugal','Croacia'] },
+  { code:'R32-13', teams:['Suiza','Argelia'] },
+  { code:'R32-14', teams:['Australia','Egipto'] },
+  { code:'R32-15', teams:['Argentina','Cabo Verde'] },
+  { code:'R32-16', teams:['Colombia','Ghana'] }
+];
+
+function canonicalTeamKey(name) {
+  return clean(apiNameToLocal(name || ''));
+}
+
+function canonicalPairKey(a, b) {
+  return [canonicalTeamKey(a), canonicalTeamKey(b)].sort().join('|');
+}
+
+const CANONICAL_R32_BY_PAIR = new Map(
+  CANONICAL_R32_FIXTURES.map(f => [canonicalPairKey(f.teams[0], f.teams[1]), f])
+);
+
+function getKnockoutCardByRoundCode(code) {
+  return getKnockoutCards().find(card => knockoutCodeFromCard(card) === code) || null;
+}
+
+function orientCandidateForCanonicalFixture(item, fixture) {
+  const [wanted1, wanted2] = fixture.teams;
+  const direct = canonicalTeamKey(item.h) === canonicalTeamKey(wanted1) && canonicalTeamKey(item.a) === canonicalTeamKey(wanted2);
+  const swapped = canonicalTeamKey(item.h) === canonicalTeamKey(wanted2) && canonicalTeamKey(item.a) === canonicalTeamKey(wanted1);
+  if (direct) return item;
+  if (swapped) return cloneCandidateForCard(item, true);
+  return item;
+}
+
+function applyCanonicalR32FromApi(candidates, used) {
+  let updated = 0;
+
+  candidates.forEach(item => {
+    if (used.has(item.index)) return;
+    const fixture = CANONICAL_R32_BY_PAIR.get(canonicalPairKey(item.h, item.a));
+    if (!fixture) return;
+
+    const card = getKnockoutCardByRoundCode(fixture.code);
+    if (!card) return;
+
+    const oriented = orientCandidateForCanonicalFixture(item, fixture);
+    if (updateKnockoutCardFromCandidate(card, oriented)) {
+      // La tarjeta mantiene su hora Madrid fija y su código real.
+      card.dataset.stage = 'Dieciseisavos';
+      const group = card.querySelector('.match-time .group');
+      if (group) group.textContent = 'Dieciseisavos';
+      card.classList.remove('phase-r16');
+      card.classList.add('phase-r32');
+      used.add(item.index);
+      updated++;
+    }
+  });
+
+  return updated;
+}
+
+function applyKnockoutDataFromApi(apiMatches) {
+  const cards = getKnockoutCards();
+  if (!cards.length) return 0;
+  const candidates = getKnockoutCandidates(apiMatches);
+  if (!candidates.length) return 0;
+
+  const used = new Set();
+  let updated = 0;
+
+  // 1) Para dieciseisavos, manda el fixture canónico exacto por equipos.
+  updated += applyCanonicalR32FromApi(candidates, used);
+
+  // 2) Para rondas posteriores o partidos no incluidos en la tabla canónica, usamos el fallback anterior.
+  cards.forEach(card => {
+    const code = knockoutCodeFromCard(card);
+    if (/^R32-/.test(code) && CANONICAL_R32_FIXTURES.some(f => f.code === code)) return;
+
+    const item = findCandidateForKnockoutCard(card, candidates, used);
+    if (!item) return;
+    if (updateKnockoutCardFromCandidate(card, item)) {
+      used.add(item.index);
+      updated++;
+    }
+  });
+
+  if (updated) {
+    if (typeof applyFilters === 'function') applyFilters();
+    if (typeof renderKnockouts === 'function') renderKnockouts();
+    console.info(`[Mundial 2026] Eliminatorias actualizadas desde Worker/canónico: ${updated}`);
+  }
+
+  return updated;
 }
 </script>
 
