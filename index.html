@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.7</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1232,14 +1232,6 @@ to { transform: rotate(360deg); }
   box-shadow: 0 0 0 5px rgba(11, 95, 255, .12), 0 12px 28px rgba(15, 23, 42, .16);
 }
 
-
-
-/* v23.7: eliminatorias resueltas automáticamente */
-.match.knockout-resolved{border-color:#22c55e!important;border-left-color:#16a34a!important;background:#f0fdf4!important}
-.match.knockout-resolved .knockout-day-label{background:#dcfce7;color:#166534}
-.knockout-teams.resolved{color:#0f172a!important;font-style:normal!important;font-weight:950}
-.knockout-meta.resolved{color:#166534!important}
-.knockout-source-note{margin-top:6px;color:#64748b;font-size:11px;font-weight:750}
 </style>
 
 
@@ -1267,14 +1259,14 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v23.7: eliminatorias desde API con parche directo de vista y calendario -->
+<!-- v23: eliminatorias dinámicas desde Worker + caché rápida -->
 </head>
 <body>
 <main class="page">
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v23.7 · 28/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v23 · 28/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -3976,128 +3968,55 @@ const spainOnly = document.getElementById('spainOnly');
 const clearFilters = document.getElementById('clearFilters');
 const resultsInfo = document.getElementById('resultsInfo');
 
-/* v23.7: filtros rápidos desacoplados de canales/resultados */
-let __filterIndex = null;
-let __filterRaf = 0;
-
-function normalizeFilterTeam(value) {
-  return String(value || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function isSpainForFilter(team1, team2, spainFlag) {
-  if (spainFlag === '1') return true;
-  const a = normalizeFilterTeam(team1);
-  const b = normalizeFilterTeam(team2);
-  return a === 'spain' || a === 'espana' || b === 'spain' || b === 'espana';
-}
-
-function buildFilterIndex() {
-  const sectionMap = new Map();
-
-  const items = Array.from(document.querySelectorAll('.match')).map((el) => {
-    const section = el.closest('[data-date-section]');
-    if (section && !sectionMap.has(section)) {
-      sectionMap.set(section, { el: section, total: 0, visible: 0, lastHidden: null });
-    }
-    if (section) sectionMap.get(section).total++;
-
-    return {
-      el,
-      sectionInfo: section ? sectionMap.get(section) : null,
-      hidden: el.classList.contains('hidden-filter')
-    };
-  });
-
-  __filterIndex = {
-    items,
-    sections: Array.from(sectionMap.values())
-  };
-
-  return __filterIndex;
-}
-
-function getFilterIndex() {
-  if (!__filterIndex || __filterIndex.items.length !== document.querySelectorAll('.match').length) {
-    return buildFilterIndex();
-  }
-  return __filterIndex;
-}
-
-window.rebuildFilterIndex = buildFilterIndex;
-
-function applyFiltersNow() {
-  __filterRaf = 0;
-
+function applyFilters() {
   const team = teamFilter.value;
   const date = dateFilter.value;
   const channel = channelFilter.value;
   const onlySpain = spainOnly.checked;
-  const active = !!(team || date || channel || onlySpain);
-
-  const index = getFilterIndex();
+  const matches = document.querySelectorAll('.match');
+  let visible = 0;
   const visibleSet = new Set();
 
-  for (const section of index.sections) section.visible = 0;
+  matches.forEach(match => {
+    const team1 = match.dataset.team1;
+    const team2 = match.dataset.team2;
+    const matchDate = match.dataset.date;
+    const matchChannel = match.dataset.channel;
+    const isSpain = match.dataset.spain === '1';
 
-  for (const item of index.items) {
-    const el = item.el;
-    const d = el.dataset;
-
-    const team1 = d.team1 || '';
-    const team2 = d.team2 || '';
     const show =
       (!team || team1 === team || team2 === team) &&
-      (!date || d.date === date) &&
-      (!channel || d.channel === channel) &&
-      (!onlySpain || isSpainForFilter(team1, team2, d.spain));
+      (!date || matchDate === date) &&
+      (!channel || matchChannel === channel) &&
+      (!onlySpain || isSpain);
 
-    if (item.hidden === show) {
-      el.classList.toggle('hidden-filter', !show);
-      item.hidden = !show;
-    }
-
+    match.classList.toggle('hidden-filter', !show);
     if (show) {
-      if (item.sectionInfo) item.sectionInfo.visible++;
-      visibleSet.add(`${d.date || ''}|${team1}|${team2}|${d.channel || ''}`);
+      const key = `${matchDate}|${team1}|${team2}|${matchChannel}`;
+      visibleSet.add(key);
     }
-  }
+  });
 
-  for (const section of index.sections) {
-    const shouldHide = section.total > 0 && section.visible === 0;
-    if (section.lastHidden !== shouldHide) {
-      section.el.classList.toggle('hidden-filter', shouldHide);
-      section.lastHidden = shouldHide;
-    }
-  }
+  visible = visibleSet.size;
 
-  const visible = visibleSet.size;
+  document.querySelectorAll('[data-date-section]').forEach(section => {
+    const visibleMatches = section.querySelectorAll('.match:not(.hidden-filter)').length;
+    const hasMatches = section.querySelectorAll('.match').length > 0;
+    section.classList.toggle('hidden-filter', hasMatches && visibleMatches === 0);
+  });
+
+  const active = team || date || channel || onlySpain;
   resultsInfo.style.display = active ? 'block' : 'none';
   resultsInfo.textContent = active ? `${visible} partido${visible === 1 ? '' : 's'} encontrados` : '';
 }
 
-function applyFilters() {
-  if (__filterRaf) cancelAnimationFrame(__filterRaf);
-  __filterRaf = requestAnimationFrame(applyFiltersNow);
-}
-
 [teamFilter, dateFilter, channelFilter, spainOnly].forEach(el => el.addEventListener('change', applyFilters));
-
 clearFilters.addEventListener('click', () => {
   teamFilter.value = '';
   dateFilter.value = '';
   channelFilter.value = '';
   spainOnly.checked = false;
   applyFilters();
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-  buildFilterIndex();
 });
 </script>
 
@@ -4292,15 +4211,8 @@ function applyCachedResults() {
     const payload = JSON.parse(cached);
     const api = arr(payload);
     if (!api.length) return 0;
-    window.__lastMundialApiGames = api;
-    const updated = applyIndexedResults(indexApiMatches(api), 'caché');
-    if (typeof window.applyApiKnockoutMatches === 'function') {
-      window.applyApiKnockoutMatches(api);
-    }
-    if (typeof window.updateKnockoutParticipants === 'function') {
-      window.updateKnockoutParticipants();
-    }
-    return updated;
+    if (typeof applyKnockoutDataFromApi === 'function') applyKnockoutDataFromApi(api);
+    return applyIndexedResults(indexApiMatches(api), 'caché');
   } catch (e) {
     console.warn('[Mundial 2026] No se pudo leer la caché de resultados:', e);
     return 0;
@@ -4345,15 +4257,8 @@ async function updateResults(options = {}) {
     localStorage.setItem(RESULTS_CACHE_KEY, JSON.stringify(payload));
 
     const api = arr(payload);
-    window.__lastMundialApiGames = api;
+    if (typeof applyKnockoutDataFromApi === 'function') applyKnockoutDataFromApi(api);
     applyIndexedResults(indexApiMatches(api), 'Worker');
-    try { window.dispatchEvent(new Event('mundial:results-updated')); } catch {}
-    if (typeof window.applyApiKnockoutMatches === 'function') {
-      window.applyApiKnockoutMatches(api);
-    }
-    if (typeof window.updateKnockoutParticipants === 'function') {
-      window.updateKnockoutParticipants();
-    }
 
     const nextRefreshSeconds = getAutoRefreshSecondsFromResponse(res, payload);
     window.__worldCupNextRefreshSeconds = nextRefreshSeconds;
@@ -4699,459 +4604,250 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-
 <script>
-/* v23.7: eliminatorias desde worldcup26.ir primero; fallback automático si faltan equipos */
-(function(){
-  const GROUP_PLACEHOLDER_RE = /^(1º|2º|3º)\s+Grupo\s+(.+)$/i;
-  const WINNER_PLACEHOLDER_RE = /^Ganador\s+(.+)$/i;
-  const LOSER_PLACEHOLDER_RE = /^Perdedor\s+(.+)$/i;
+/* v23: eliminatorias dinámicas desde JSON del Worker */
+const KNOCKOUT_START_DATE = '2026-06-28';
+const KNOCKOUT_STAGE_KEYWORDS = ['dieciseisavos','octavos','cuartos','semifinal','final','tercer','third','round of 32','round of 16','quarter','semi'];
 
-  // Relación entre los códigos internos del calendario y los IDs reales que devuelve worldcup26.ir.
-  const KNOCKOUT_API_ID_BY_CODE = {
-    'R32-1':'73',  'R32-2':'76',  'R32-3':'74',  'R32-4':'75',
-    'R32-5':'78',  'R32-6':'77',  'R32-7':'79',  'R32-8':'80',
-    'R32-9':'82',  'R32-10':'81', 'R32-11':'84', 'R32-12':'83',
-    'R32-13':'85', 'R32-14':'88', 'R32-15':'86', 'R32-16':'87',
-    'R16-1':'90',  'R16-2':'89',  'R16-3':'91',  'R16-4':'92',
-    'R16-5':'93',  'R16-6':'94',  'R16-7':'95',  'R16-8':'96',
-    'QF-1':'97',   'QF-2':'98',   'QF-3':'99',   'QF-4':'100',
-    'SF-1':'101',  'SF-2':'102',  '3P':'103',    'F':'104'
+function isKnownNationalTeam(name) {
+  const local = apiNameToLocal(name || '');
+  return Object.values(GROUP_TEAMS || {}).some(list => list.includes(local));
+}
+
+function normalizeApiDateValue(value) {
+  if (!value) return '';
+  const raw = String(value).trim();
+  const iso = raw.match(/(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if (iso) return `${iso[1]}-${String(iso[2]).padStart(2,'0')}-${String(iso[3]).padStart(2,'0')}`;
+
+  const euro = raw.match(/(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})/);
+  if (euro) return `${euro[3]}-${String(euro[2]).padStart(2,'0')}-${String(euro[1]).padStart(2,'0')}`;
+
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year:'numeric', month:'2-digit', day:'2-digit' }).format(d);
+  }
+  return '';
+}
+
+function normalizeApiTimeValue(value) {
+  if (!value) return '';
+  const raw = String(value).trim();
+  const m = raw.match(/(\d{1,2}):(\d{2})/);
+  return m ? `${String(m[1]).padStart(2,'0')}:${m[2]}` : '';
+}
+
+function minutesFromTime(value) {
+  const t = normalizeApiTimeValue(value);
+  if (!t) return null;
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function cardKickoffMinutes(card) {
+  const d = new Date(card.dataset.kickoff || '');
+  if (Number.isNaN(d.getTime())) {
+    return minutesFromTime(card.querySelector('.match-time')?.childNodes?.[0]?.textContent || '');
+  }
+  const parts = new Intl.DateTimeFormat('es-ES', { timeZone:'Europe/Madrid', hour:'2-digit', minute:'2-digit', hour12:false }).formatToParts(d);
+  const get = type => Number(parts.find(p => p.type === type)?.value || 0);
+  return get('hour') * 60 + get('minute');
+}
+
+function extendedNorm(raw, index = 0) {
+  const m = norm(raw);
+  const date = normalizeApiDateValue(pick(
+    raw.date, raw.match_date, raw.game_date, raw.local_date, raw.utcDate, raw.datetime,
+    raw.start_time, raw.kickoff, raw.fixture?.date, raw.fixture?.timestamp
+  ));
+  const time = normalizeApiTimeValue(pick(
+    raw.time, raw.match_time, raw.local_time, raw.kickoff_time, raw.start_time,
+    raw.datetime, raw.fixture?.date
+  ));
+  const stage = String(pick(
+    raw.stage, raw.round, raw.phase, raw.type, raw.group, raw.matchday,
+    raw.fixture?.status?.long, raw.league?.round
+  ) || '').trim();
+
+  return {
+    ...m,
+    raw,
+    index,
+    date,
+    time,
+    stage,
+    hasRealTeams: isKnownNationalTeam(m.h) && isKnownNationalTeam(m.a)
   };
+}
 
-  const KNOCKOUT_CODE_BY_API_ID = Object.fromEntries(
-    Object.entries(KNOCKOUT_API_ID_BY_CODE).map(([code, id]) => [String(id), code])
-  );
+function isApiKnockoutMatch(item) {
+  if (!item || !item.hasRealTeams) return false;
+  const stageText = clean(item.stage || '');
+  const stageLooksKo = KNOCKOUT_STAGE_KEYWORDS.some(k => stageText.includes(clean(k)));
+  const dateLooksKo = item.date && item.date >= KNOCKOUT_START_DATE;
+  const typeLooksGroup = ['group','grupo','fase de grupos'].some(k => stageText === clean(k) || stageText.includes(clean(k)));
+  return stageLooksKo || (dateLooksKo && !typeLooksGroup);
+}
 
-  function latestApiGames() {
-    if (Array.isArray(window.__lastMundialApiGames)) return window.__lastMundialApiGames;
-    try { return arr(JSON.parse(localStorage.getItem(RESULTS_CACHE_KEY) || '{}')); } catch { return []; }
+function getKnockoutCards() {
+  return Array.from(document.querySelectorAll('.match.knockout-pending, .match[data-stage]'))
+    .filter(card => (card.dataset.date || '') >= KNOCKOUT_START_DATE);
+}
+
+function knockoutCodeFromCard(card) {
+  const key = card.dataset.resultKey || '';
+  return key.includes('|') ? key.split('|').pop() : key;
+}
+
+function getKnockoutCandidates(apiMatches) {
+  return arr(apiMatches).map((raw, index) => extendedNorm(raw, index)).filter(isApiKnockoutMatch);
+}
+
+function findCandidateForKnockoutCard(card, candidates, used) {
+  const date = card.dataset.date || '';
+  const cardMin = cardKickoffMinutes(card);
+  const stage = clean(card.dataset.stage || '');
+
+  const sameDate = candidates.filter(c => !used.has(c.index) && c.date === date);
+  if (!sameDate.length) return null;
+
+  const withDistance = sameDate.map(c => {
+    const cMin = minutesFromTime(c.time);
+    const distance = Number.isFinite(cardMin) && Number.isFinite(cMin) ? Math.abs(cardMin - cMin) : 9999;
+    const stageBonus = stage && clean(c.stage).includes(stage) ? -1000 : 0;
+    return { c, score: distance + stageBonus };
+  }).sort((a,b) => a.score - b.score || a.c.index - b.c.index);
+
+  // Si hay hora, aceptamos el más cercano. Si no hay hora en el JSON, usamos el orden de ese día.
+  return withDistance[0]?.c || null;
+}
+
+function flagForTeamName(team) {
+  return TEAM_EMOJI?.[team] || '🏳️';
+}
+
+function updateTeamElement(card, position, team) {
+  const teamEl = card.querySelectorAll('.team')[position];
+  if (!teamEl) return;
+  const flag = teamEl.querySelector('.flag');
+  const name = teamEl.querySelector('b');
+  if (flag) {
+    flag.textContent = flagForTeamName(team);
+    flag.setAttribute('aria-label', `Bandera ${team}`);
   }
+  if (name) name.textContent = team;
+}
 
-  function apiGameById(id) {
-    const wanted = String(id || '');
-    return latestApiGames().find(g => String(g?.id || '') === wanted) || null;
+function setCardChannelForKnockout(card, team1, team2) {
+  const spain = team1 === 'España' || team2 === 'España';
+  const channel = spain ? 'RTVE / DAZN' : 'DAZN';
+  card.dataset.channel = channel;
+  card.dataset.spain = spain ? '1' : '0';
+  card.classList.toggle('spain-match', spain);
+  const channelEl = card.querySelector('.channel');
+  if (channelEl) {
+    channelEl.textContent = channel;
+    channelEl.classList.toggle('rtve', spain);
   }
+}
 
-  function apiGameByCode(code) {
-    return apiGameById(KNOCKOUT_API_ID_BY_CODE[code]);
-  }
+function updateKnockoutCardFromCandidate(card, item) {
+  const team1 = item.h;
+  const team2 = item.a;
+  if (!team1 || !team2) return false;
 
-  function hasRealApiTeam(raw, side) {
-    if (!raw) return false;
-    const id = String(raw?.[`${side}_team_id`] ?? '').trim();
-    const name = String(raw?.[`${side}_team_name_en`] ?? '').trim();
-    return !!name && id !== '0' && id.toLowerCase() !== 'null';
-  }
+  card.dataset.team1 = team1;
+  card.dataset.team2 = team2;
+  updateTeamElement(card, 0, team1);
+  updateTeamElement(card, 1, team2);
+  setCardChannelForKnockout(card, team1, team2);
 
-  function apiTeam(raw, side) {
-    if (!hasRealApiTeam(raw, side)) return null;
-    return apiNameToLocal(raw[`${side}_team_name_en`]);
-  }
+  if (item.date) card.dataset.date = item.date;
+  if (item.stage && !card.dataset.stage) card.dataset.stage = item.stage;
 
-  function apiLabel(raw, side) {
-    return String(raw?.[`${side}_team_label`] || '').trim();
-  }
-
-  function localizedLabel(label) {
-    const text = String(label || '').trim();
-    if (!text) return '';
-
-    let m = text.match(/^Winner Group\s+([A-L])$/i);
-    if (m) return `1º Grupo ${m[1].toUpperCase()}`;
-
-    m = text.match(/^Runner-up Group\s+([A-L])$/i);
-    if (m) return `2º Grupo ${m[1].toUpperCase()}`;
-
-    m = text.match(/^3rd Group\s+(.+)$/i);
-    if (m) return `3º Grupo ${m[1].toUpperCase()}`;
-
-    m = text.match(/^Winner Match\s+(\d+)$/i);
-    if (m) return `Ganador ${KNOCKOUT_CODE_BY_API_ID[m[1]] || 'Match ' + m[1]}`;
-
-    m = text.match(/^Loser Match\s+(\d+)$/i);
-    if (m) return `Perdedor ${KNOCKOUT_CODE_BY_API_ID[m[1]] || 'Match ' + m[1]}`;
-
-    return text;
-  }
-
-  function ensureOriginalKnockoutDatasets() {
-    document.querySelectorAll('.match.knockout-pending').forEach(card => {
-      if (!card.dataset.originalTeam1) card.dataset.originalTeam1 = card.dataset.team1 || '';
-      if (!card.dataset.originalTeam2) card.dataset.originalTeam2 = card.dataset.team2 || '';
-    });
-  }
-
-  function knockoutCodeFromKey(key) {
-    return String(key || '').split('|').pop().trim();
-  }
-
-  function groupComplete(group) {
-    if (typeof calculateStandings !== 'function') return false;
-    const standings = calculateStandings(group);
-    return standings.length === 4 && standings.every(t => Number(t.pj) >= 3);
-  }
-
-  function getGroupRankedTeam(group, pos) {
-    if (!groupComplete(group)) return null;
-    const standings = calculateStandings(group);
-    return standings[pos - 1]?.team || null;
-  }
-
-  function thirdPlaceCandidates(groupsText) {
-    const groups = String(groupsText || '')
-      .split('/')
-      .map(x => x.trim().toUpperCase())
-      .filter(Boolean);
-
-    const candidates = groups
-      .filter(g => GROUP_TEAMS?.[g] && groupComplete(g))
-      .map(g => {
-        const t = calculateStandings(g)[2];
-        return t ? { ...t, group: g } : null;
-      })
-      .filter(Boolean);
-
-    candidates.sort((a,b) =>
-      b.pts - a.pts ||
-      b.dg - a.dg ||
-      b.gf - a.gf ||
-      a.team.localeCompare(b.team, 'es')
-    );
-
-    return candidates;
-  }
-
-  function getBestThird(groupsText) {
-    const candidate = thirdPlaceCandidates(groupsText)[0];
-    return candidate?.team || null;
-  }
-
-  function scoreFromCard(card) {
-    const txt = card?.querySelector?.('.scoreline')?.textContent || '';
-    const m = txt.match(/(\d+)\s*-\s*(\d+)/);
-    if (!m) return null;
-    return { s1: Number(m[1]), s2: Number(m[2]) };
-  }
-
-  function scoreFromApi(raw) {
-    if (!raw) return null;
-    const hs = raw.home_score;
-    const as = raw.away_score;
-    if (hs === undefined || as === undefined || hs === null || as === null) return null;
-    if (String(hs).toLowerCase() === 'null' || String(as).toLowerCase() === 'null') return null;
-    if (String(hs).trim() === '' || String(as).trim() === '') return null;
-    return { s1: Number(hs), s2: Number(as) };
-  }
-
-  function statusFromApi(raw) {
-    if (!raw) return 'scheduled';
-    return norm(raw).st;
-  }
-
-  function representativeKnockoutCard(code) {
-    const cards = [...document.querySelectorAll('.match.knockout-pending')]
-      .filter(c => knockoutCodeFromKey(c.dataset.resultKey) === code);
-    return cards.find(c => c.classList.contains('has-score')) || cards[0] || null;
-  }
-
-  function getApiMatchWinnerById(id, wantLoser = false, seen = new Set()) {
-    const raw = apiGameById(id);
-    const code = KNOCKOUT_CODE_BY_API_ID[String(id)] || '';
-    if (!raw || seen.has(`api:${id}:${wantLoser ? 'L' : 'W'}`)) return null;
-    seen.add(`api:${id}:${wantLoser ? 'L' : 'W'}`);
-
-    const st = statusFromApi(raw);
-    const score = scoreFromApi(raw);
-    if (st !== 'finished' || !score || score.s1 === score.s2) return null;
-
-    const teams = resolveApiGameParticipants(raw, code, seen);
-    if (!teams.team1 || !teams.team2) return null;
-
-    const homeWon = score.s1 > score.s2;
-    if (wantLoser) return homeWon ? teams.team2 : teams.team1;
-    return homeWon ? teams.team1 : teams.team2;
-  }
-
-  function getKnockoutWinner(code, seen = new Set()) {
-    const apiId = KNOCKOUT_API_ID_BY_CODE[code];
-    if (apiId) {
-      const apiWinner = getApiMatchWinnerById(apiId, false, seen);
-      if (apiWinner) return apiWinner;
+  const hasHome = item.hs !== undefined && item.hs !== null && String(item.hs).trim() !== '' && String(item.hs).trim() !== 'null';
+  const hasAway = item.as !== undefined && item.as !== null && String(item.as).trim() !== '' && String(item.as).trim() !== 'null';
+  if (hasHome && hasAway && (item.st === 'live' || item.st === 'finished')) {
+    const score = card.querySelector('.scoreline');
+    if (score) {
+      card.classList.add('has-score');
+      card.classList.toggle('live-match', item.st === 'live');
+      card.classList.toggle('finished-match', item.st === 'finished');
+      score.textContent = `${Number(item.hs)} - ${Number(item.as)}${item.st === 'live' && safeDisplayMinute(item.min) ? ` · ${safeDisplayMinute(item.min)}'` : ''}`;
     }
-
-    if (!code || seen.has(`card:${code}`)) return null;
-    seen.add(`card:${code}`);
-
-    const card = representativeKnockoutCard(code);
-    if (!card || !card.classList.contains('has-score')) return null;
-    if (card.classList.contains('live-match')) return null;
-
-    const score = scoreFromCard(card);
-    if (!score || score.s1 === score.s2) return null;
-
-    const teams = resolveCardParticipants(card, seen);
-    if (!teams.team1 || !teams.team2) return null;
-    return score.s1 > score.s2 ? teams.team1 : teams.team2;
   }
+  return true;
+}
 
-  function resolvePlaceholder(value, seen = new Set()) {
-    const raw = String(value || '').trim();
-    if (!raw) return null;
+function applyKnockoutDataFromApi(apiMatches) {
+  const cards = getKnockoutCards();
+  if (!cards.length) return 0;
+  const candidates = getKnockoutCandidates(apiMatches);
+  if (!candidates.length) return 0;
 
-    const groupMatch = raw.match(GROUP_PLACEHOLDER_RE);
-    if (groupMatch) {
-      const pos = groupMatch[1];
-      const groupText = groupMatch[2].trim().toUpperCase();
-      if (pos === '1º') return getGroupRankedTeam(groupText, 1);
-      if (pos === '2º') return getGroupRankedTeam(groupText, 2);
-      if (pos === '3º') return getBestThird(groupText);
-      return null;
+  const used = new Set();
+  let updated = 0;
+
+  cards.forEach(card => {
+    const item = findCandidateForKnockoutCard(card, candidates, used);
+    if (!item) return;
+    if (updateKnockoutCardFromCandidate(card, item)) {
+      used.add(item.index);
+      updated++;
     }
-
-    const winnerMatch = raw.match(WINNER_PLACEHOLDER_RE);
-    if (winnerMatch) return getKnockoutWinner(winnerMatch[1].trim(), seen);
-
-    const loserMatch = raw.match(LOSER_PLACEHOLDER_RE);
-    if (loserMatch) {
-      const code = loserMatch[1].trim();
-      const apiId = KNOCKOUT_API_ID_BY_CODE[code];
-      if (apiId) return getApiMatchWinnerById(apiId, true, seen);
-      return null;
-    }
-
-    if (/^Equipo pendiente/i.test(raw)) return null;
-    return raw;
-  }
-
-  function resolveApiLabel(label, seen = new Set()) {
-    const text = String(label || '').trim();
-    if (!text) return null;
-
-    let m = text.match(/^Winner Group\s+([A-L])$/i);
-    if (m) return getGroupRankedTeam(m[1].toUpperCase(), 1);
-
-    m = text.match(/^Runner-up Group\s+([A-L])$/i);
-    if (m) return getGroupRankedTeam(m[1].toUpperCase(), 2);
-
-    m = text.match(/^3rd Group\s+(.+)$/i);
-    if (m) return getBestThird(m[1].toUpperCase());
-
-    m = text.match(/^Winner Match\s+(\d+)$/i);
-    if (m) return getApiMatchWinnerById(m[1], false, seen);
-
-    m = text.match(/^Loser Match\s+(\d+)$/i);
-    if (m) return getApiMatchWinnerById(m[1], true, seen);
-
-    return null;
-  }
-
-  function resolveApiGameParticipants(raw, code = '', seen = new Set()) {
-    const homeFromApi = apiTeam(raw, 'home');
-    const awayFromApi = apiTeam(raw, 'away');
-    const homeLabel = apiLabel(raw, 'home');
-    const awayLabel = apiLabel(raw, 'away');
-
-    const card = code ? representativeKnockoutCard(code) : null;
-    const fallback = card ? resolveCardParticipants(card, seen) : { team1:null, team2:null, placeholder1:'', placeholder2:'' };
-
-    return {
-      team1: homeFromApi || resolveApiLabel(homeLabel, seen) || fallback.team1,
-      team2: awayFromApi || resolveApiLabel(awayLabel, seen) || fallback.team2,
-      placeholder1: localizedLabel(homeLabel) || fallback.placeholder1 || 'Equipo pendiente',
-      placeholder2: localizedLabel(awayLabel) || fallback.placeholder2 || 'Equipo pendiente',
-      source1: homeFromApi ? 'api' : 'fallback',
-      source2: awayFromApi ? 'api' : 'fallback'
-    };
-  }
-
-  function resolveCardParticipants(card, seen = new Set()) {
-    ensureOriginalKnockoutDatasets();
-    const code = knockoutCodeFromKey(card?.dataset?.resultKey || '');
-    const raw = apiGameByCode(code);
-    if (raw) return resolveApiGameParticipants(raw, code, seen);
-
-    const p1 = card?.dataset?.originalTeam1 || card?.dataset?.team1 || '';
-    const p2 = card?.dataset?.originalTeam2 || card?.dataset?.team2 || '';
-    return {
-      team1: resolvePlaceholder(p1, new Set(seen)),
-      team2: resolvePlaceholder(p2, new Set(seen)),
-      placeholder1: p1,
-      placeholder2: p2,
-      source1: 'fallback',
-      source2: 'fallback'
-    };
-  }
-
-  function teamFlag(team) {
-    return (typeof TEAM_EMOJI !== 'undefined' && TEAM_EMOJI[team]) ? TEAM_EMOJI[team] : '🏳️';
-  }
-
-  function setTeamInCard(card, side, team) {
-    const teams = card.querySelectorAll('.teams .team');
-    const node = teams[side === 1 ? 0 : 1];
-    if (!node || !team) return;
-    const flag = node.querySelector('.flag');
-    if (flag) {
-      flag.textContent = teamFlag(team);
-      flag.setAttribute('aria-label', `Bandera ${team}`);
-    }
-    const b = node.querySelector('b');
-    if (b) b.textContent = team;
-    card.dataset[side === 1 ? 'team1' : 'team2'] = team;
-  }
-
-  function applyResolvedKnockoutsToCalendar() {
-    ensureOriginalKnockoutDatasets();
-    let resolved = 0;
-
-    document.querySelectorAll('.match.knockout-pending').forEach(card => {
-      const r = resolveCardParticipants(card);
-      const hasResolved = !!(r.team1 || r.team2);
-
-      if (r.team1) setTeamInCard(card, 1, r.team1);
-      if (r.team2) setTeamInCard(card, 2, r.team2);
-
-      card.classList.toggle('knockout-resolved', !!(r.team1 && r.team2));
-      if (r.team1 && r.team2) resolved++;
-    });
-
-    return resolved;
-  }
-
-  function codeScoreText(code) {
-    const raw = apiGameByCode(code);
-    const apiScore = scoreFromApi(raw);
-    if (apiScore && (statusFromApi(raw) === 'live' || statusFromApi(raw) === 'finished')) return `${apiScore.s1} - ${apiScore.s2}`;
-
-    const card = representativeKnockoutCard(code);
-    const score = scoreFromCard(card);
-    if (!score) return '';
-    return `${score.s1} - ${score.s2}`;
-  }
-
-
-  function setKnockoutScoreDirect(card, txt, st, min) {
-    const scoreEl = card?.querySelector?.('.scoreline');
-    if (!scoreEl) return;
-    card.classList.add('has-score');
-    card.classList.toggle('live-match', st === 'live');
-    card.classList.toggle('finished-match', st === 'finished');
-    scoreEl.textContent = txt + (st === 'live' && min ? ` · ${min}'` : '');
-  }
-
-  function renderResolvedKnockoutRow(code) {
-    const card = representativeKnockoutCard(code);
-    const raw = apiGameByCode(code);
-    const r = raw ? resolveApiGameParticipants(raw, code) : card ? resolveCardParticipants(card) : { team1:null, team2:null, placeholder1:'Equipo pendiente', placeholder2:'Equipo pendiente' };
-    const t1 = r.team1 || r.placeholder1 || 'Equipo pendiente';
-    const t2 = r.team2 || r.placeholder2 || 'Equipo pendiente';
-    const both = !!(r.team1 && r.team2);
-    const score = codeScoreText(code);
-    const winner = getKnockoutWinner(code);
-    const apiUsed = r.source1 === 'api' || r.source2 === 'api';
-
-    return `
-      <article class="knockout-match">
-        <div class="knockout-code">${code}</div>
-        <div>
-          <div class="knockout-teams ${both ? 'resolved' : 'empty'}">
-            ${r.team1 ? `${teamFlag(r.team1)} ${t1}` : t1}
-            vs
-            ${r.team2 ? `${teamFlag(r.team2)} ${t2}` : t2}
-            ${score ? `<strong> · ${score}</strong>` : '<span class="knockout-score-empty" aria-label="resultado pendiente"></span>'}
-          </div>
-          <div class="knockout-meta ${both ? 'resolved' : 'pending'}">
-            ${winner ? `Clasificado: ${teamFlag(winner)} ${winner}` : both ? (apiUsed ? 'Cruce recibido desde API' : 'Cruce calculado automáticamente') : 'Pendiente de clasificación y resultado'}
-          </div>
-          ${(!both && (r.placeholder1 || r.placeholder2)) ? `<div class="knockout-source-note">${r.placeholder1 || ''} vs ${r.placeholder2 || ''}</div>` : ''}
-        </div>
-      </article>
-    `;
-  }
-
-  window.applyApiKnockoutMatches = function applyApiKnockoutMatches(apiGames = latestApiGames()) {
-    window.__lastMundialApiGames = Array.isArray(apiGames) ? apiGames : latestApiGames();
-
-    for (const raw of window.__lastMundialApiGames) {
-      const code = KNOCKOUT_CODE_BY_API_ID[String(raw?.id || '')];
-      if (!code) continue;
-      const card = representativeKnockoutCard(code);
-      if (!card) continue;
-
-      const r = resolveApiGameParticipants(raw, code);
-      if (r.team1) setTeamInCard(card, 1, r.team1);
-      if (r.team2) setTeamInCard(card, 2, r.team2);
-
-      const score = scoreFromApi(raw);
-      const st = statusFromApi(raw);
-      if (score && (st === 'live' || st === 'finished')) {
-        setKnockoutScoreDirect(card, `${score.s1} - ${score.s2}`, st, safeDisplayMinute(raw.time_elapsed));
-      }
-    }
-
-    return applyResolvedKnockoutsToCalendar();
-  };
-
-  const previousRenderKnockouts = window.renderKnockouts || (typeof renderKnockouts === 'function' ? renderKnockouts : null);
-  window.renderKnockouts = function renderKnockoutsAuto() {
-    const box = document.getElementById('knockoutView');
-    if (!box || typeof KNOCKOUT_STRUCTURE === 'undefined') {
-      if (typeof previousRenderKnockouts === 'function') previousRenderKnockouts();
-      return;
-    }
-
-    window.applyApiKnockoutMatches(latestApiGames());
-
-    box.innerHTML = KNOCKOUT_STRUCTURE.map(round => `
-      <section class="knockout-round">
-        <div class="knockout-title">${round.title}</div>
-        <div class="knockout-list">
-          ${round.matches.map(([code]) => renderResolvedKnockoutRow(code)).join('')}
-        </div>
-      </section>
-    `).join('');
-  };
-
-  window.updateKnockoutParticipants = function updateKnockoutParticipants() {
-    const count = window.applyApiKnockoutMatches(latestApiGames());
-    if (document.getElementById('knockoutView')?.classList.contains('active')) {
-      window.renderKnockouts();
-    }
-    console.info(`[Mundial 2026] Cruces de eliminatorias resueltos: ${count}`);
-    return count;
-  };
-
-  document.addEventListener('DOMContentLoaded', () => {
-    ensureOriginalKnockoutDatasets();
-    setTimeout(window.updateKnockoutParticipants, 350);
   });
 
-  // Refrescar cruces cuando cambien resultados o clasificación.
-  setTimeout(() => {
-    const oldSetScore = window.setScore;
-    if (typeof oldSetScore === 'function' && !oldSetScore.__knockoutAutoWrapped) {
-      const wrapped = function(...args) {
-        const out = oldSetScore.apply(this, args);
-        setTimeout(window.updateKnockoutParticipants, 0);
-        return out;
-      };
-      wrapped.__knockoutAutoWrapped = true;
-      window.setScore = wrapped;
-    }
-  }, 800);
-
-  const oldRenderStandings = window.renderStandings || (typeof renderStandings === 'function' ? renderStandings : null);
-  if (typeof oldRenderStandings === 'function' && !oldRenderStandings.__knockoutAutoWrapped) {
-    const wrappedStandings = function(...args) {
-      const out = oldRenderStandings.apply(this, args);
-      setTimeout(window.updateKnockoutParticipants, 0);
-      return out;
-    };
-    wrappedStandings.__knockoutAutoWrapped = true;
-    window.renderStandings = wrappedStandings;
+  if (updated) {
+    if (typeof applyFilters === 'function') applyFilters();
+    if (typeof renderKnockouts === 'function') renderKnockouts();
+    console.info(`[Mundial 2026] Eliminatorias actualizadas desde Worker: ${updated}`);
   }
-})();
+
+  return updated;
+}
+
+function getKnockoutCardByCode(code) {
+  return getKnockoutCards().find(card => knockoutCodeFromCard(card) === code) || null;
+}
+
+function knockoutCardSummaryHtml(code) {
+  const card = getKnockoutCardByCode(code);
+  const team1 = card?.dataset?.team1 || 'Equipo pendiente';
+  const team2 = card?.dataset?.team2 || 'Equipo pendiente';
+  const score = card?.querySelector?.('.scoreline')?.textContent?.trim() || '';
+  const date = card?.dataset?.date || '';
+  const time = card?.querySelector?.('.match-time')?.childNodes?.[0]?.textContent?.trim() || '';
+  const channel = card?.dataset?.channel || 'DAZN';
+  const ready = team1 && team2 && !team1.includes('Grupo') && !team2.includes('Grupo') && !team1.includes('Ganador') && !team2.includes('Ganador') && !team1.includes('Perdedor') && !team2.includes('Perdedor');
+  return `
+    <article class="knockout-match">
+      <div class="knockout-code">${code}</div>
+      <div>
+        <div class="knockout-teams ${ready ? '' : 'empty'}">
+          ${flagForTeamName(team1)} ${team1} vs ${flagForTeamName(team2)} ${team2}
+          ${score ? `<strong style="margin-left:6px">${score}</strong>` : `<span class="knockout-score-empty" aria-label="resultado pendiente"></span>`}
+        </div>
+        <div class="knockout-meta pending">
+          ${date}${time ? ' · ' + time : ''} · ${channel}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+/* Reemplaza la tabla de eliminatorias para que use los equipos ya resueltos en las tarjetas. */
+renderKnockouts = function() {
+  const box = document.getElementById('knockoutView');
+  if (!box) return;
+  box.innerHTML = KNOCKOUT_STRUCTURE.map(round => `
+    <section class="knockout-round">
+      <div class="knockout-title">${round.title}</div>
+      <div class="knockout-list">
+        ${round.matches.map(([code]) => knockoutCardSummaryHtml(code)).join('')}
+      </div>
+    </section>
+  `).join('');
+};
 </script>
 
 <script>
@@ -5860,583 +5556,6 @@ window.addEventListener('resize', () => {
   document.addEventListener('DOMContentLoaded', () => {
     // Espera a que se apliquen layout responsive y resultados cacheados iniciales.
     setTimeout(() => window.scrollToNextKickoffMatch({ instant: false }), 700);
-  });
-})();
-</script>
-
-
-
-<script>
-/* v23.7: parche directo para rellenar dieciseisavos/eliminatorias desde worldcup26.ir
-   Prioridad: home_team_name_en / away_team_name_en del JSON. Fallback: labels. */
-(function(){
-  const API_ID_BY_CODE = {
-    'R32-1':'73',  'R32-2':'76',  'R32-3':'74',  'R32-4':'75',
-    'R32-5':'78',  'R32-6':'77',  'R32-7':'79',  'R32-8':'80',
-    'R32-9':'82',  'R32-10':'81', 'R32-11':'84', 'R32-12':'83',
-    'R32-13':'85', 'R32-14':'88', 'R32-15':'86', 'R32-16':'87',
-    'R16-1':'90',  'R16-2':'89',  'R16-3':'91',  'R16-4':'92',
-    'R16-5':'93',  'R16-6':'94',  'R16-7':'95',  'R16-8':'96',
-    'QF-1':'97',   'QF-2':'98',   'QF-3':'99',   'QF-4':'100',
-    'SF-1':'101',  'SF-2':'102',  '3P':'103',    'F':'104'
-  };
-  const CODE_BY_API_ID = Object.fromEntries(Object.entries(API_ID_BY_CODE).map(([c,id]) => [String(id), c]));
-
-  function gamesFromCache() {
-    if (Array.isArray(window.__lastMundialApiGames) && window.__lastMundialApiGames.length) return window.__lastMundialApiGames;
-    try {
-      const payload = JSON.parse(localStorage.getItem(window.RESULTS_CACHE_KEY || 'mundial2026_results_cache_v1') || '{}');
-      if (typeof window.arr === 'function') return window.arr(payload);
-      if (Array.isArray(payload)) return payload;
-      return Array.isArray(payload.games) ? payload.games : [];
-    } catch { return []; }
-  }
-
-  function gameByApiId(id) {
-    return gamesFromCache().find(g => String(g?.id || '') === String(id || '')) || null;
-  }
-
-  function codeFromCard(card) {
-    return String(card?.dataset?.resultKey || '').split('|').pop().trim();
-  }
-
-  function localName(name) {
-    if (!name) return '';
-    try {
-      if (typeof window.apiNameToLocal === 'function') return window.apiNameToLocal(name);
-      if (typeof apiNameToLocal === 'function') return apiNameToLocal(name);
-    } catch {}
-    const map = {
-      'Mexico':'México','South Africa':'Sudáfrica','South Korea':'Corea del Sur','Czech Republic':'República Checa','Czechia':'República Checa',
-      'Canada':'Canadá','Bosnia and Herzegovina':'Bosnia y Herzegovina','Qatar':'Qatar','Switzerland':'Suiza',
-      'Brazil':'Brasil','Morocco':'Marruecos','Haiti':'Haití','Scotland':'Escocia',
-      'United States':'Estados Unidos','USA':'Estados Unidos','Paraguay':'Paraguay','Australia':'Australia','Turkey':'Turquía',
-      'Germany':'Alemania','Curaçao':'Curazao','Curacao':'Curazao','Ivory Coast':'Costa de Marfil','Ecuador':'Ecuador',
-      'Netherlands':'Países Bajos','Japan':'Japón','Sweden':'Suecia','Tunisia':'Túnez',
-      'Belgium':'Bélgica','Egypt':'Egipto','Iran':'Irán','New Zealand':'Nueva Zelanda',
-      'Spain':'España','Cape Verde':'Cabo Verde','Saudi Arabia':'Arabia Saudí','Uruguay':'Uruguay',
-      'France':'Francia','Senegal':'Senegal','Iraq':'Irak','Norway':'Noruega',
-      'Argentina':'Argentina','Algeria':'Argelia','Austria':'Austria','Jordan':'Jordania',
-      'Portugal':'Portugal','Democratic Republic of the Congo':'RD Congo','DR Congo':'RD Congo','Uzbekistan':'Uzbekistán','Colombia':'Colombia',
-      'England':'Inglaterra','Croatia':'Croacia','Ghana':'Ghana','Panama':'Panamá'
-    };
-    return map[String(name).trim()] || String(name).trim();
-  }
-
-  function realTeam(raw, side) {
-    if (!raw) return '';
-    const id = String(raw?.[`${side}_team_id`] ?? '').trim();
-    const name = String(raw?.[`${side}_team_name_en`] ?? '').trim();
-    if (!name || id === '0' || id.toLowerCase() === 'null') return '';
-    return localName(name);
-  }
-
-  function localLabel(label) {
-    const text = String(label || '').trim();
-    if (!text) return '';
-    let m = text.match(/^Winner Group\s+([A-L])$/i); if (m) return `1º Grupo ${m[1].toUpperCase()}`;
-    m = text.match(/^Runner-up Group\s+([A-L])$/i); if (m) return `2º Grupo ${m[1].toUpperCase()}`;
-    m = text.match(/^3rd Group\s+(.+)$/i); if (m) return `3º Grupo ${m[1].toUpperCase()}`;
-    m = text.match(/^Winner Match\s+(\d+)$/i); if (m) return `Ganador ${CODE_BY_API_ID[m[1]] || 'Match ' + m[1]}`;
-    m = text.match(/^Loser Match\s+(\d+)$/i); if (m) return `Perdedor ${CODE_BY_API_ID[m[1]] || 'Match ' + m[1]}`;
-    return text;
-  }
-
-  function score(raw) {
-    if (!raw) return '';
-    const hs = raw.home_score, as = raw.away_score;
-    if (hs === undefined || as === undefined || hs === null || as === null) return '';
-    if (String(hs).toLowerCase() === 'null' || String(as).toLowerCase() === 'null') return '';
-    return `${Number(hs)} - ${Number(as)}`;
-  }
-
-  function status(raw) {
-    const finished = String(raw?.finished || '').toLowerCase();
-    const elapsed = String(raw?.time_elapsed || '').toLowerCase();
-    if (finished === 'true' || ['finished','finish','fulltime','full time','ft'].includes(elapsed)) return 'finished';
-    if (elapsed === 'live' || elapsed === 'playing' || /^\d+(\+\d+)?$/.test(elapsed)) return 'live';
-    return 'scheduled';
-  }
-
-  function flag(team) {
-    try { if (typeof TEAM_EMOJI !== 'undefined' && TEAM_EMOJI[team]) return TEAM_EMOJI[team]; } catch {}
-    return '🏳️';
-  }
-
-  function setCardTeam(card, side, team) {
-    if (!card || !team) return;
-    const node = card.querySelectorAll('.teams .team')[side === 1 ? 0 : 1];
-    if (!node) return;
-    node.querySelector('.flag')?.replaceChildren(document.createTextNode(flag(team)));
-    const f = node.querySelector('.flag');
-    if (f) f.setAttribute('aria-label', `Bandera ${team}`);
-    const b = node.querySelector('b');
-    if (b) b.textContent = team;
-    card.dataset[side === 1 ? 'team1' : 'team2'] = team;
-  }
-
-  function setCardScore(card, raw) {
-    const txt = score(raw);
-    const st = status(raw);
-    if (!txt || (st !== 'live' && st !== 'finished')) return;
-    const scoreEl = card.querySelector('.scoreline');
-    if (!scoreEl) return;
-    card.classList.add('has-score');
-    card.classList.toggle('live-match', st === 'live');
-    card.classList.toggle('finished-match', st === 'finished');
-    scoreEl.textContent = txt;
-  }
-
-  function cardParticipantsFromApi(code) {
-    const raw = gameByApiId(API_ID_BY_CODE[code]);
-    const t1 = realTeam(raw, 'home');
-    const t2 = realTeam(raw, 'away');
-    return {
-      raw,
-      team1: t1,
-      team2: t2,
-      label1: t1 || localLabel(raw?.home_team_label) || 'Equipo pendiente',
-      label2: t2 || localLabel(raw?.away_team_label) || 'Equipo pendiente'
-    };
-  }
-
-  function applyApiTeamsToKnockoutCards() {
-    let resolved = 0;
-    document.querySelectorAll('.match.knockout-pending').forEach(card => {
-      const code = codeFromCard(card);
-      if (!API_ID_BY_CODE[code]) return;
-      const r = cardParticipantsFromApi(code);
-      if (r.team1) setCardTeam(card, 1, r.team1);
-      if (r.team2) setCardTeam(card, 2, r.team2);
-      if (r.raw) setCardScore(card, r.raw);
-      card.classList.toggle('knockout-resolved', !!(r.team1 && r.team2));
-      if (r.team1 && r.team2) resolved++;
-    });
-    console.info(`[Mundial 2026] v23.7 cruces desde API aplicados en calendario: ${resolved}`);
-    return resolved;
-  }
-
-  function winnerForApiId(id, loser = false, seen = new Set()) {
-    const raw = gameByApiId(id);
-    if (!raw || seen.has(`${id}:${loser ? 'L' : 'W'}`)) return '';
-    seen.add(`${id}:${loser ? 'L' : 'W'}`);
-    if (status(raw) !== 'finished') return '';
-    const sc = score(raw).match(/(\d+)\s*-\s*(\d+)/);
-    if (!sc) return '';
-    const h = Number(sc[1]), a = Number(sc[2]);
-    if (h === a) return '';
-    const code = CODE_BY_API_ID[String(id)] || '';
-    const p = code ? cardParticipantsFromApi(code) : { team1: realTeam(raw, 'home'), team2: realTeam(raw, 'away') };
-    if (!p.team1 || !p.team2) return '';
-    const homeWon = h > a;
-    return loser ? (homeWon ? p.team2 : p.team1) : (homeWon ? p.team1 : p.team2);
-  }
-
-  function resolveLabelMaybe(label) {
-    const text = String(label || '').trim();
-    let m = text.match(/^Winner Match\s+(\d+)$/i); if (m) return winnerForApiId(m[1], false);
-    m = text.match(/^Loser Match\s+(\d+)$/i); if (m) return winnerForApiId(m[1], true);
-    return '';
-  }
-
-  function renderApiFirstKnockouts() {
-    const box = document.getElementById('knockoutView');
-    if (!box || typeof KNOCKOUT_STRUCTURE === 'undefined') return;
-    applyApiTeamsToKnockoutCards();
-
-    box.innerHTML = KNOCKOUT_STRUCTURE.map(round => `
-      <section class="knockout-round">
-        <div class="knockout-title">${round.title}</div>
-        <div class="knockout-list">
-          ${round.matches.map(([code]) => {
-            const raw = gameByApiId(API_ID_BY_CODE[code]);
-            const fromApi = cardParticipantsFromApi(code);
-            const resolved1 = fromApi.team1 || resolveLabelMaybe(raw?.home_team_label);
-            const resolved2 = fromApi.team2 || resolveLabelMaybe(raw?.away_team_label);
-            const t1 = resolved1 || fromApi.label1;
-            const t2 = resolved2 || fromApi.label2;
-            const both = !!(resolved1 && resolved2);
-            const sc = score(raw);
-            const w = raw ? winnerForApiId(raw.id, false) : '';
-            return `
-              <article class="knockout-match">
-                <div class="knockout-code">${code}</div>
-                <div>
-                  <div class="knockout-teams ${both ? 'resolved' : 'empty'}">
-                    ${resolved1 ? `${flag(resolved1)} ${t1}` : t1}
-                    vs
-                    ${resolved2 ? `${flag(resolved2)} ${t2}` : t2}
-                    ${sc && status(raw) !== 'scheduled' ? `<strong> · ${sc}</strong>` : '<span class="knockout-score-empty" aria-label="resultado pendiente"></span>'}
-                  </div>
-                  <div class="knockout-meta ${both ? 'resolved' : 'pending'}">
-                    ${w ? `Clasificado: ${flag(w)} ${w}` : both ? 'Cruce recibido desde API' : 'Pendiente de API / clasificación'}
-                  </div>
-                </div>
-              </article>`;
-          }).join('')}
-        </div>
-      </section>`).join('');
-  }
-
-  window.applyApiTeamsToKnockoutCardsV232 = applyApiTeamsToKnockoutCards;
-  window.renderApiFirstKnockoutsV232 = renderApiFirstKnockouts;
-
-  function refreshNow() {
-    applyApiTeamsToKnockoutCards();
-    if (document.getElementById('knockoutView')?.classList.contains('active')) renderApiFirstKnockouts();
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(refreshNow, 100);
-    setTimeout(refreshNow, 1000);
-    setTimeout(refreshNow, 3000);
-
-    document.getElementById('knockoutBtn')?.addEventListener('click', () => {
-      setTimeout(renderApiFirstKnockouts, 0);
-      setTimeout(renderApiFirstKnockouts, 250);
-    });
-  });
-
-  const wrapLater = () => {
-    const oldUpdate = window.updateResults;
-    if (typeof oldUpdate === 'function' && !oldUpdate.__apiKoV232Wrapped) {
-      const wrapped = async function(...args) {
-        const out = await oldUpdate.apply(this, args);
-        setTimeout(refreshNow, 0);
-        return out;
-      };
-      wrapped.__apiKoV232Wrapped = true;
-      window.updateResults = wrapped;
-    }
-  };
-  wrapLater();
-  setTimeout(wrapLater, 0);
-})();
-</script>
-
-
-
-<script>
-/* v23.7: parche robusto para cruces de eliminatorias usando directamente IDs de worldcup26.ir.
-   Soluciona casos como España-Austria (API id 84 / código R32-11) aunque la vista antigua
-   no se haya repintado o updateResults no quede correctamente envuelto. */
-(function(){
-  const MAP = {
-    'R32-1':'73',  'R32-2':'76',  'R32-3':'74',  'R32-4':'75',
-    'R32-5':'78',  'R32-6':'77',  'R32-7':'79',  'R32-8':'80',
-    'R32-9':'82',  'R32-10':'81', 'R32-11':'84', 'R32-12':'83',
-    'R32-13':'85', 'R32-14':'88', 'R32-15':'86', 'R32-16':'87',
-    'R16-1':'90',  'R16-2':'89',  'R16-3':'91',  'R16-4':'92',
-    'R16-5':'93',  'R16-6':'94',  'R16-7':'95',  'R16-8':'96',
-    'QF-1':'97',   'QF-2':'98',   'QF-3':'99',   'QF-4':'100',
-    'SF-1':'101',  'SF-2':'102',  '3P':'103',    'F':'104'
-  };
-  const CODE_BY_ID = Object.fromEntries(Object.entries(MAP).map(([code, id]) => [String(id), code]));
-  const CACHE_KEY = 'mundial2026_results_cache_v1';
-
-  function arr(payload) {
-    if (Array.isArray(payload)) return payload;
-    if (!payload || typeof payload !== 'object') return [];
-    for (const k of ['games','matches','data','results','fixtures']) {
-      if (Array.isArray(payload[k])) return payload[k];
-    }
-    return [];
-  }
-
-  function localName(name) {
-    const raw = String(name || '').trim();
-    if (!raw) return '';
-    try { if (typeof apiNameToLocal === 'function') return apiNameToLocal(raw); } catch {}
-    const map = {
-      'Mexico':'México','South Africa':'Sudáfrica','South Korea':'Corea del Sur','Czech Republic':'República Checa','Czechia':'República Checa',
-      'Canada':'Canadá','Bosnia and Herzegovina':'Bosnia y Herzegovina','Qatar':'Qatar','Switzerland':'Suiza',
-      'Brazil':'Brasil','Morocco':'Marruecos','Haiti':'Haití','Scotland':'Escocia',
-      'United States':'Estados Unidos','USA':'Estados Unidos','Paraguay':'Paraguay','Australia':'Australia','Turkey':'Turquía','Türkiye':'Turquía',
-      'Germany':'Alemania','Curaçao':'Curazao','Curacao':'Curazao','Ivory Coast':'Costa de Marfil','Ecuador':'Ecuador',
-      'Netherlands':'Países Bajos','Japan':'Japón','Sweden':'Suecia','Tunisia':'Túnez',
-      'Belgium':'Bélgica','Egypt':'Egipto','Iran':'Irán','IR Iran':'Irán','New Zealand':'Nueva Zelanda',
-      'Spain':'España','Cape Verde':'Cabo Verde','Saudi Arabia':'Arabia Saudí','Uruguay':'Uruguay',
-      'France':'Francia','Senegal':'Senegal','Iraq':'Irak','Norway':'Noruega',
-      'Argentina':'Argentina','Algeria':'Argelia','Austria':'Austria','Jordan':'Jordania',
-      'Portugal':'Portugal','Democratic Republic of the Congo':'RD Congo','Democratic Republic of Congo':'RD Congo','DR Congo':'RD Congo','Congo DR':'RD Congo',
-      'Uzbekistan':'Uzbekistán','Colombia':'Colombia','England':'Inglaterra','Croatia':'Croacia','Ghana':'Ghana','Panama':'Panamá'
-    };
-    return map[raw] || raw;
-  }
-
-  function labelName(label) {
-    const text = String(label || '').trim();
-    let m = text.match(/^Winner Group\s+([A-L])$/i); if (m) return `1º Grupo ${m[1].toUpperCase()}`;
-    m = text.match(/^Runner-up Group\s+([A-L])$/i); if (m) return `2º Grupo ${m[1].toUpperCase()}`;
-    m = text.match(/^3rd Group\s+(.+)$/i); if (m) return `3º Grupo ${m[1].toUpperCase()}`;
-    m = text.match(/^Winner Match\s+(\d+)$/i); if (m) return `Ganador ${CODE_BY_ID[m[1]] || 'Match ' + m[1]}`;
-    m = text.match(/^Loser Match\s+(\d+)$/i); if (m) return `Perdedor ${CODE_BY_ID[m[1]] || 'Match ' + m[1]}`;
-    return text;
-  }
-
-  function getGamesFromMemory() {
-    if (Array.isArray(window.__lastMundialApiGames) && window.__lastMundialApiGames.length) return window.__lastMundialApiGames;
-    try { return arr(JSON.parse(localStorage.getItem(CACHE_KEY) || '{}')); } catch { return []; }
-  }
-
-  function gameById(id, games = getGamesFromMemory()) {
-    return games.find(g => String(g?.id || '') === String(id || '')) || null;
-  }
-
-  function codeFromCard(card) {
-    const key = String(card?.dataset?.resultKey || '');
-    return key.split('|').pop().trim();
-  }
-
-  function teamFromGame(game, side) {
-    if (!game) return '';
-    const id = String(game[`${side}_team_id`] ?? '').trim();
-    const name = String(game[`${side}_team_name_en`] ?? '').trim();
-    if (!name || id === '0' || id.toLowerCase() === 'null') return '';
-    return localName(name);
-  }
-
-  function participant(game, side) {
-    return teamFromGame(game, side) || labelName(game?.[`${side}_team_label`]) || 'Equipo pendiente';
-  }
-
-  function emoji(team) {
-    try { if (typeof TEAM_EMOJI !== 'undefined' && TEAM_EMOJI[team]) return TEAM_EMOJI[team]; } catch {}
-    const e = {'España':'🇪🇸','Austria':'🇦🇹','Portugal':'🇵🇹','Croacia':'🇭🇷','Colombia':'🇨🇴','Ghana':'🇬🇭','Argentina':'🇦🇷','Cabo Verde':'🇨🇻'};
-    return e[team] || '🏳️';
-  }
-
-  function setTeamNode(card, idx, team) {
-    const node = card?.querySelectorAll('.teams .team')?.[idx];
-    if (!node || !team) return;
-    const flag = node.querySelector('.flag');
-    if (flag) {
-      flag.textContent = emoji(team);
-      flag.setAttribute('aria-label', `Bandera ${team}`);
-    }
-    const b = node.querySelector('b');
-    if (b) b.textContent = team;
-  }
-
-  function rawScore(game) {
-    if (!game) return '';
-    const hs = game.home_score;
-    const as = game.away_score;
-    if (hs === undefined || as === undefined || hs === null || as === null) return '';
-    if (String(hs).toLowerCase() === 'null' || String(as).toLowerCase() === 'null') return '';
-    return `${Number(hs)} - ${Number(as)}`;
-  }
-
-  function status(game) {
-    const f = String(game?.finished || '').toLowerCase();
-    const t = String(game?.time_elapsed || '').toLowerCase();
-    if (f === 'true' || ['finished','finish','fulltime','full time','ft'].includes(t)) return 'finished';
-    if (t === 'live' || t === 'playing' || /^\d+(\+\d+)?$/.test(t)) return 'live';
-    return 'scheduled';
-  }
-
-  function setScoreIfNeeded(card, game) {
-    const sc = rawScore(game);
-    const st = status(game);
-    if (!sc || st === 'scheduled') return;
-    const box = card.querySelector('.scoreline');
-    if (!box) return;
-    box.textContent = sc;
-    card.classList.add('has-score');
-    card.classList.toggle('finished-match', st === 'finished');
-    card.classList.toggle('live-match', st === 'live');
-  }
-
-  function updateOneCard(card, game) {
-    if (!card || !game) return false;
-    const home = participant(game, 'home');
-    const away = participant(game, 'away');
-    setTeamNode(card, 0, home);
-    setTeamNode(card, 1, away);
-    card.dataset.team1 = home;
-    card.dataset.team2 = away;
-    card.dataset.apiFixtureId = String(game.id || '');
-    card.dataset.spain = (home === 'España' || away === 'España') ? '1' : '0';
-    card.classList.toggle('spain-match', home === 'España' || away === 'España');
-    card.classList.toggle('knockout-resolved', !!(teamFromGame(game, 'home') && teamFromGame(game, 'away')));
-    setScoreIfNeeded(card, game);
-    return true;
-  }
-
-  function applyKnockoutsFromGames(games) {
-    if (!Array.isArray(games) || !games.length) return 0;
-    window.__lastMundialApiGames = games;
-    let updated = 0;
-    document.querySelectorAll('.match.knockout-pending').forEach(card => {
-      const code = codeFromCard(card);
-      const apiId = MAP[code];
-      if (!apiId) return;
-      const game = gameById(apiId, games);
-      if (updateOneCard(card, game)) updated++;
-    });
-    try { if (typeof applyFilters === 'function') applyFilters(); } catch {}
-    console.info(`[Mundial 2026] v23.7 cruces aplicados desde API: ${updated}`);
-    return updated;
-  }
-
-  function findWinnerFromGameId(id, wantLoser = false, games = getGamesFromMemory()) {
-    const game = gameById(id, games);
-    if (!game || status(game) !== 'finished') return '';
-    const sc = rawScore(game).match(/(\d+)\s*-\s*(\d+)/);
-    if (!sc) return '';
-    const h = Number(sc[1]), a = Number(sc[2]);
-    if (h === a) return '';
-    const home = participant(game, 'home');
-    const away = participant(game, 'away');
-    const homeWins = h > a;
-    return wantLoser ? (homeWins ? away : home) : (homeWins ? home : away);
-  }
-
-  function resolvedParticipant(game, side, games) {
-    const direct = teamFromGame(game, side);
-    if (direct) return direct;
-    const label = String(game?.[`${side}_team_label`] || '');
-    let m = label.match(/^Winner Match\s+(\d+)$/i);
-    if (m) return findWinnerFromGameId(m[1], false, games) || labelName(label);
-    m = label.match(/^Loser Match\s+(\d+)$/i);
-    if (m) return findWinnerFromGameId(m[1], true, games) || labelName(label);
-    return labelName(label) || 'Equipo pendiente';
-  }
-
-  function renderKnockoutViewV233() {
-    const box = document.getElementById('knockoutView');
-    if (!box || typeof KNOCKOUT_STRUCTURE === 'undefined') return;
-    const games = getGamesFromMemory();
-    applyKnockoutsFromGames(games);
-    box.innerHTML = KNOCKOUT_STRUCTURE.map(round => `
-      <section class="knockout-round">
-        <div class="knockout-title">${round.title}</div>
-        <div class="knockout-list">
-          ${round.matches.map(([code]) => {
-            const game = gameById(MAP[code], games);
-            const home = resolvedParticipant(game, 'home', games);
-            const away = resolvedParticipant(game, 'away', games);
-            const sc = rawScore(game);
-            const st = status(game);
-            const win = game ? findWinnerFromGameId(game.id, false, games) : '';
-            const hasReal = !!(teamFromGame(game, 'home') && teamFromGame(game, 'away'));
-            return `
-              <article class="knockout-match">
-                <div class="knockout-code">${code}</div>
-                <div>
-                  <div class="knockout-teams ${hasReal ? 'resolved' : 'empty'}">
-                    ${hasReal ? emoji(home) + ' ' : ''}${home} vs ${hasReal ? emoji(away) + ' ' : ''}${away}
-                    ${sc && st !== 'scheduled' ? `<strong> · ${sc}</strong>` : '<span class="knockout-score-empty" aria-label="resultado pendiente"></span>'}
-                  </div>
-                  <div class="knockout-meta ${hasReal ? 'resolved' : 'pending'}">
-                    ${win ? `Clasificado: ${emoji(win)} ${win}` : hasReal ? 'Cruce recibido desde API' : 'Pendiente de API'}
-                  </div>
-                </div>
-              </article>`;
-          }).join('')}
-        </div>
-      </section>`).join('');
-  }
-
-  async function fetchAndApplyKnockouts() {
-    applyKnockoutsFromGames(getGamesFromMemory());
-    try {
-      const sep = String(RESULTS_API_URL || '').includes('?') ? '&' : '?';
-      const res = await fetch(`${RESULTS_API_URL}${sep}t=${Date.now()}`, { cache: 'no-store' });
-      if (!res.ok) return;
-      const payload = await res.json();
-      const games = arr(payload);
-      if (!games.length) return;
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify(payload)); } catch {}
-      applyKnockoutsFromGames(games);
-      if (document.getElementById('knockoutView')?.classList.contains('active')) renderKnockoutViewV233();
-    } catch(e) {
-      console.warn('[Mundial 2026] v23.7 no pudo refrescar cruces:', e);
-    }
-  }
-
-  window.applyKnockoutsFromApiV233 = applyKnockoutsFromGames;
-  window.renderKnockoutViewV233 = renderKnockoutViewV233;
-
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(fetchAndApplyKnockouts, 50);
-    setTimeout(fetchAndApplyKnockouts, 900);
-    setTimeout(fetchAndApplyKnockouts, 2500);
-
-    document.getElementById('knockoutBtn')?.addEventListener('click', () => {
-      setTimeout(renderKnockoutViewV233, 0);
-      setTimeout(fetchAndApplyKnockouts, 150);
-    });
-  });
-
-  const wrap = () => {
-    const old = window.updateResults;
-    if (typeof old !== 'function' || old.__koV233Wrapped) return;
-    const wrapped = async function(...args) {
-      const out = await old.apply(this, args);
-      setTimeout(fetchAndApplyKnockouts, 0);
-      return out;
-    };
-    wrapped.__koV233Wrapped = true;
-    window.updateResults = wrapped;
-  };
-  wrap();
-  setTimeout(wrap, 0);
-})();
-</script>
-
-
-<script>
-/* v23.7: canales rápidos - España RTVE / DAZN, resto DAZN */
-(function() {
-  function normTeam(value) {
-    return String(value || '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9 ]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  function isSpain(team) {
-    const n = normTeam(team);
-    return n === 'spain' || n === 'espana';
-  }
-
-  function channelForCard(card) {
-    return (isSpain(card.dataset.team1) || isSpain(card.dataset.team2)) ? 'RTVE / DAZN' : 'DAZN';
-  }
-
-  window.applyAutoBroadcastChannels = function({ refilter = false } = {}) {
-    let changed = false;
-
-    document.querySelectorAll('.match').forEach(card => {
-      const channel = channelForCard(card);
-      if (card.dataset.channel !== channel) {
-        card.dataset.channel = channel;
-        changed = true;
-      }
-
-      const el = card.querySelector('.channel');
-      if (el && el.textContent !== channel) el.textContent = channel;
-    });
-
-    if (changed && typeof window.rebuildFilterIndex === 'function') {
-      window.rebuildFilterIndex();
-    }
-
-    if (changed && refilter && typeof applyFilters === 'function') {
-      applyFilters();
-    }
-  };
-
-  document.addEventListener('DOMContentLoaded', () => {
-    requestAnimationFrame(() => window.applyAutoBroadcastChannels({ refilter: false }));
-  });
-
-  window.addEventListener('mundial:results-updated', () => {
-    requestAnimationFrame(() => window.applyAutoBroadcastChannels({ refilter: true }));
   });
 })();
 </script>
