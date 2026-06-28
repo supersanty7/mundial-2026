@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.4</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.5</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1225,7 +1225,7 @@ to { transform: rotate(360deg); }
 
 
 
-/* v23.4: resaltar próximo partido al centrar scroll */
+/* v22.9: resaltar próximo partido al centrar scroll */
 .match.next-kickoff-focus {
   outline: 3px solid rgba(11, 95, 255, .45);
   outline-offset: 2px;
@@ -1234,7 +1234,7 @@ to { transform: rotate(360deg); }
 
 
 
-/* v23.4: eliminatorias resueltas automáticamente */
+/* v23.5: eliminatorias resueltas automáticamente */
 .match.knockout-resolved{border-color:#22c55e!important;border-left-color:#16a34a!important;background:#f0fdf4!important}
 .match.knockout-resolved .knockout-day-label{background:#dcfce7;color:#166534}
 .knockout-teams.resolved{color:#0f172a!important;font-style:normal!important;font-weight:950}
@@ -1267,14 +1267,14 @@ to { transform: rotate(360deg); }
 
 
 
-<!-- v23.4: eliminatorias desde API con parche directo de vista y calendario -->
+<!-- v23.5: eliminatorias desde API con parche directo de vista y calendario -->
 </head>
 <body>
 <main class="page">
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v23.4 · 28/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v23.5 · 28/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -4274,6 +4274,7 @@ async function updateResults(options = {}) {
     const api = arr(payload);
     window.__lastMundialApiGames = api;
     applyIndexedResults(indexApiMatches(api), 'Worker');
+    try { window.dispatchEvent(new Event('mundial:results-updated')); } catch {}
     if (typeof window.applyApiKnockoutMatches === 'function') {
       window.applyApiKnockoutMatches(api);
     }
@@ -4627,7 +4628,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 <script>
-/* v23.4: eliminatorias desde worldcup26.ir primero; fallback automático si faltan equipos */
+/* v23.5: eliminatorias desde worldcup26.ir primero; fallback automático si faltan equipos */
 (function(){
   const GROUP_PLACEHOLDER_RE = /^(1º|2º|3º)\s+Grupo\s+(.+)$/i;
   const WINNER_PLACEHOLDER_RE = /^Ganador\s+(.+)$/i;
@@ -5081,7 +5082,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <script>
-/* v23.4: primera carga desde caché + refresco forzado inicial */
+/* v22.9: primera carga desde caché + refresco forzado inicial */
 async function loadResultsFromWorkerFirst() {
   if (typeof updateResults !== 'function') return;
 
@@ -5112,7 +5113,7 @@ async function loadResultsFromWorkerFirst() {
 
 
 <script>
-/* v23.4: inicializador caché primero, upstream después */
+/* v22.9: inicializador caché primero, upstream después */
 document.addEventListener('DOMContentLoaded', async () => {
   if (typeof loadMundialRemoteConfig === 'function') {
     await loadMundialRemoteConfig();
@@ -5322,7 +5323,7 @@ function cleanScoreText(value) {
 }
 
 
-/* v23.4: normalización robusta de estado y marcador */
+/* v22.3: normalización robusta de estado y marcador */
 function normalizeApiMatchStatus(apiMatch, card = null) {
   const finishedRaw = String(apiMatch?.finished ?? '').trim().toLowerCase();
   const elapsedRaw = String(apiMatch?.time_elapsed ?? apiMatch?.min ?? '').trim().toLowerCase();
@@ -5705,7 +5706,7 @@ window.addEventListener('resize', () => {
 
 
 <script>
-/* v23.4: centrar automáticamente el próximo partido */
+/* v22.9: centrar automáticamente el próximo partido */
 (function() {
   let nextKickoffScrollDone = false;
 
@@ -5793,7 +5794,7 @@ window.addEventListener('resize', () => {
 
 
 <script>
-/* v23.4: parche directo para rellenar dieciseisavos/eliminatorias desde worldcup26.ir
+/* v23.5: parche directo para rellenar dieciseisavos/eliminatorias desde worldcup26.ir
    Prioridad: home_team_name_en / away_team_name_en del JSON. Fallback: labels. */
 (function(){
   const API_ID_BY_CODE = {
@@ -5938,7 +5939,7 @@ window.addEventListener('resize', () => {
       card.classList.toggle('knockout-resolved', !!(r.team1 && r.team2));
       if (r.team1 && r.team2) resolved++;
     });
-    console.info(`[Mundial 2026] v23.4 cruces desde API aplicados en calendario: ${resolved}`);
+    console.info(`[Mundial 2026] v23.5 cruces desde API aplicados en calendario: ${resolved}`);
     return resolved;
   }
 
@@ -6043,7 +6044,7 @@ window.addEventListener('resize', () => {
 
 
 <script>
-/* v23.4: parche robusto para cruces de eliminatorias usando directamente IDs de worldcup26.ir.
+/* v23.5: parche robusto para cruces de eliminatorias usando directamente IDs de worldcup26.ir.
    Soluciona casos como España-Austria (API id 84 / código R32-11) aunque la vista antigua
    no se haya repintado o updateResults no quede correctamente envuelto. */
 (function(){
@@ -6201,7 +6202,7 @@ window.addEventListener('resize', () => {
       if (updateOneCard(card, game)) updated++;
     });
     try { if (typeof applyFilters === 'function') applyFilters(); } catch {}
-    console.info(`[Mundial 2026] v23.4 cruces aplicados desde API: ${updated}`);
+    console.info(`[Mundial 2026] v23.5 cruces aplicados desde API: ${updated}`);
     return updated;
   }
 
@@ -6277,7 +6278,7 @@ window.addEventListener('resize', () => {
       applyKnockoutsFromGames(games);
       if (document.getElementById('knockoutView')?.classList.contains('active')) renderKnockoutViewV233();
     } catch(e) {
-      console.warn('[Mundial 2026] v23.4 no pudo refrescar cruces:', e);
+      console.warn('[Mundial 2026] v23.5 no pudo refrescar cruces:', e);
     }
   }
 
@@ -6313,9 +6314,9 @@ window.addEventListener('resize', () => {
 
 
 <script>
-/* v23.4: canales automáticos - España siempre RTVE / DAZN, resto DAZN */
+/* v23.5: canales automáticos aislados - España RTVE / DAZN, resto DAZN */
 (function() {
-  function normalizeTeamNameForChannel(value) {
+  function normChannelTeam(value) {
     return String(value || '')
       .toLowerCase()
       .normalize('NFD')
@@ -6325,103 +6326,94 @@ window.addEventListener('resize', () => {
       .trim();
   }
 
-  window.getAutoBroadcastChannel = function(matchOrCard) {
-    const home =
-      matchOrCard?.home_team_name_en ||
-      matchOrCard?.home_team ||
-      matchOrCard?.h ||
-      matchOrCard?.dataset?.team1 ||
-      matchOrCard?.dataset?.homeTeam ||
-      '';
-
-    const away =
-      matchOrCard?.away_team_name_en ||
-      matchOrCard?.away_team ||
-      matchOrCard?.a ||
-      matchOrCard?.dataset?.team2 ||
-      matchOrCard?.dataset?.awayTeam ||
-      '';
-
-    const teams = [normalizeTeamNameForChannel(home), normalizeTeamNameForChannel(away)];
-    return teams.includes('spain') || teams.includes('espana') ? 'RTVE / DAZN' : 'DAZN';
-  };
-
-  function applyBroadcastChannelToCard(card, apiMatch = null) {
-    if (!card) return;
-    const channel = window.getAutoBroadcastChannel(apiMatch || card);
-    card.dataset.channel = channel;
-
-    const channelEl = card.querySelector('.channel');
-    if (channelEl) channelEl.textContent = channel;
+  function isSpainName(value) {
+    const n = normChannelTeam(value);
+    return n === 'spain' || n === 'espana';
   }
 
-  window.applyAutoBroadcastChannels = function(apiMatches = null) {
-    let matches = [];
+  function getCardTeams(card) {
+    return [
+      card?.dataset?.team1 || '',
+      card?.dataset?.team2 || ''
+    ];
+  }
+
+  function getApiGameTeams(game) {
+    return [
+      game?.home_team_name_en || game?.home_team || game?.h || '',
+      game?.away_team_name_en || game?.away_team || game?.a || ''
+    ];
+  }
+
+  function getGamesFromCacheForChannels() {
     try {
-      if (Array.isArray(apiMatches)) {
-        matches = apiMatches;
-      } else {
-        const cached = localStorage.getItem('mundial2026_results_cache_v1');
-        const payload = cached ? JSON.parse(cached) : null;
-        matches = Array.isArray(payload) ? payload : Array.isArray(payload?.games) ? payload.games : [];
-      }
-    } catch {
-      matches = [];
+      if (Array.isArray(window.__lastMundialApiGames)) return window.__lastMundialApiGames;
+      const cached = localStorage.getItem('mundial2026_results_cache_v1');
+      const payload = cached ? JSON.parse(cached) : null;
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload?.games)) return payload.games;
+    } catch {}
+    return [];
+  }
+
+  function matchApiGameForCard(card, games) {
+    const apiId = String(card?.dataset?.apiId || card?.dataset?.matchId || card?.dataset?.id || '').trim();
+    if (apiId) {
+      const byId = games.find(g => String(g?.id || '').trim() === apiId);
+      if (byId) return byId;
     }
 
-    let indexed = null;
-    try {
-      if (matches.length && typeof indexApiMatches === 'function') {
-        indexed = indexApiMatches(matches);
-      }
-    } catch {
-      indexed = null;
+    const t1 = normChannelTeam(card?.dataset?.team1 || '');
+    const t2 = normChannelTeam(card?.dataset?.team2 || '');
+    if (!t1 && !t2) return null;
+
+    return games.find(g => {
+      const [h, a] = getApiGameTeams(g).map(normChannelTeam);
+      return (h === t1 && a === t2) || (h === t2 && a === t1);
+    }) || null;
+  }
+
+  window.getAutoBroadcastChannel = function(input) {
+    if (input?.classList?.contains?.('match')) {
+      const teams = getCardTeams(input);
+      return teams.some(isSpainName) ? 'RTVE / DAZN' : 'DAZN';
     }
+
+    const teams = getApiGameTeams(input);
+    return teams.some(isSpainName) ? 'RTVE / DAZN' : 'DAZN';
+  };
+
+  window.applyAutoBroadcastChannels = function() {
+    const games = getGamesFromCacheForChannels();
 
     document.querySelectorAll('.match').forEach(card => {
-      let apiMatch = null;
+      const apiGame = matchApiGameForCard(card, games);
+      const teams = apiGame ? getApiGameTeams(apiGame) : getCardTeams(card);
+      const channel = teams.some(isSpainName) ? 'RTVE / DAZN' : 'DAZN';
 
-      try {
-        if (indexed && typeof pairKey === 'function') {
-          apiMatch = indexed.get(pairKey(card.dataset.team1, card.dataset.team2)) || null;
-        }
-      } catch {}
+      card.dataset.channel = channel;
 
-      if (!apiMatch && matches.length) {
-        const id = String(card.dataset.apiId || card.dataset.matchId || card.dataset.id || '').trim();
-        if (id) {
-          apiMatch = matches.find(m => String(m.id || '').trim() === id) || null;
-        }
-      }
-
-      applyBroadcastChannelToCard(card, apiMatch);
+      const channelEl = card.querySelector('.channel');
+      if (channelEl) channelEl.textContent = channel;
     });
+
+    // Muy importante: si el usuario tenía filtros activos, los recalculamos.
+    try {
+      if (typeof applyFilters === 'function') applyFilters();
+    } catch (e) {
+      console.warn('[Mundial 2026] No se pudieron reaplicar filtros tras canales:', e);
+    }
   };
 
-  const __oldApplyIndexedResultsForChannels = window.applyIndexedResults;
-  if (typeof __oldApplyIndexedResultsForChannels === 'function') {
-    window.applyIndexedResults = function(resultMap, sourceLabel = '') {
-      const result = __oldApplyIndexedResultsForChannels.apply(this, arguments);
-      try { window.applyAutoBroadcastChannels(); } catch {}
-      return result;
-    };
-  }
-
-  const __oldOpenMatchDetailForChannels = window.openMatchDetail;
-  if (typeof __oldOpenMatchDetailForChannels === 'function') {
-    window.openMatchDetail = function(card) {
-      try { applyBroadcastChannelToCard(card); } catch {}
-      return __oldOpenMatchDetailForChannels.apply(this, arguments);
-    };
-  }
-
   document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-      try { window.applyAutoBroadcastChannels(); } catch {}
-    }, 250);
-    setTimeout(() => {
-      try { window.applyAutoBroadcastChannels(); } catch {}
-    }, 1500);
+    setTimeout(window.applyAutoBroadcastChannels, 100);
+    setTimeout(window.applyAutoBroadcastChannels, 1200);
+    setTimeout(window.applyAutoBroadcastChannels, 3000);
+  });
+
+  // Evento simple para que otras partes puedan pedir recalcular canales sin acoplar funciones.
+  window.addEventListener('mundial:results-updated', () => {
+    setTimeout(window.applyAutoBroadcastChannels, 0);
   });
 })();
 </script>
