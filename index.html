@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.2</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.3</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1266,7 +1266,7 @@ to { transform: rotate(360deg); }
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v23.2 · 28/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v23.3 · 28/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -5006,6 +5006,167 @@ function findCandidateForKnockoutCard(card, candidates, used) {
 
   const sameDate = scored.find(x => x.c.date === cardDate && (!cardStage || !x.c.stageCode || x.c.stageCode === cardStage));
   return sameDate?.c || null;
+}
+</script>
+
+
+<script>
+/* v23.3: eliminatorias por seed de grupo antes que por hora
+   Corrección: si el JSON trae España vs Austria, debe ir en el cruce 1º Grupo H vs 2º Grupo J
+   aunque la hora del JSON venga desplazada o ambigua. La hora de la tarjeta HTML manda.
+*/
+function parseWorkerLocalDateToTimestamp(rawValue) {
+  const raw = String(rawValue || '').trim();
+  if (!raw) return null;
+
+  if (/^20\d{2}-\d{1,2}-\d{1,2}/.test(raw)) {
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d.getTime();
+  }
+
+  const m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](20\d{2})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (!m) return null;
+
+  const month = String(m[1]).padStart(2, '0');
+  const day = String(m[2]).padStart(2, '0');
+  const year = m[3];
+  const hour = String(m[4] || '00').padStart(2, '0');
+  const minute = String(m[5] || '00').padStart(2, '0');
+
+  // En esta app las tarjetas ya están en hora Madrid. Para evitar desplazar España-Austria
+  // a las 02:00, tratamos local_date como hora local de calendario, no como EDT.
+  const d = new Date(`${year}-${month}-${day}T${hour}:${minute}:00+02:00`);
+  return Number.isNaN(d.getTime()) ? null : d.getTime();
+}
+
+function groupLetterForTeam(teamName) {
+  const local = apiNameToLocal(teamName || '');
+  for (const [group, teams] of Object.entries(GROUP_TEAMS || {})) {
+    if ((teams || []).includes(local)) return group;
+  }
+  return '';
+}
+
+function seedGroupsFromText(value) {
+  const text = String(value || '').toUpperCase();
+  const match = text.match(/GRUPO\s+([A-L](?:\s*\/\s*[A-L])*)/i);
+  if (!match) return [];
+  return match[1].split('/').map(x => x.trim()).filter(Boolean);
+}
+
+function seedSlotMatchesTeam(slotText, teamName) {
+  const groups = seedGroupsFromText(slotText);
+  if (!groups.length) return null;
+  const group = groupLetterForTeam(teamName);
+  if (!group) return false;
+  return groups.includes(group);
+}
+
+function seedScoreForCandidate(card, item) {
+  const seed1 = card.dataset.seedTeam1 || card.dataset.team1 || '';
+  const seed2 = card.dataset.seedTeam2 || card.dataset.team2 || '';
+
+  const direct1 = seedSlotMatchesTeam(seed1, item.h);
+  const direct2 = seedSlotMatchesTeam(seed2, item.a);
+  const swap1 = seedSlotMatchesTeam(seed1, item.a);
+  const swap2 = seedSlotMatchesTeam(seed2, item.h);
+
+  const knownDirect = direct1 !== null || direct2 !== null;
+  const knownSwap = swap1 !== null || swap2 !== null;
+
+  function score(a, b, known) {
+    if (!known) return { penalty: 1000, matched: 0, mismatched: 0 };
+    const matched = (a === true ? 1 : 0) + (b === true ? 1 : 0);
+    const mismatched = (a === false ? 1 : 0) + (b === false ? 1 : 0);
+    return { penalty: mismatched * 10000 - matched * 3000, matched, mismatched };
+  }
+
+  const direct = score(direct1, direct2, knownDirect);
+  const swapped = score(swap1, swap2, knownSwap);
+
+  if (swapped.penalty < direct.penalty) {
+    return { penalty: swapped.penalty, swap: true, matched: swapped.matched, mismatched: swapped.mismatched };
+  }
+  return { penalty: direct.penalty, swap: false, matched: direct.matched, mismatched: direct.mismatched };
+}
+
+function cloneCandidateForCard(item, swap) {
+  if (!swap) return item;
+  return {
+    ...item,
+    h: item.a,
+    a: item.h,
+    hs: item.as,
+    as: item.hs,
+    raw: { ...item.raw, __swapped_for_card: true }
+  };
+}
+
+function findCandidateForKnockoutCard(card, candidates, used) {
+  if (!card.dataset.seedTeam1) card.dataset.seedTeam1 = card.dataset.team1 || '';
+  if (!card.dataset.seedTeam2) card.dataset.seedTeam2 = card.dataset.team2 || '';
+
+  const cardTs = cardKickoffTimestamp(card);
+  const cardStage = knockoutStageCodeFromCard(card);
+  const cardDate = card.dataset.date || '';
+
+  const scored = candidates
+    .filter(c => !used.has(c.index))
+    .map(c => {
+      const seed = seedScoreForCandidate(card, c);
+      const timeDistance = Number.isFinite(cardTs) && Number.isFinite(c.kickoffTs)
+        ? Math.abs(cardTs - c.kickoffTs) / 60000
+        : 99999;
+      const sameDatePenalty = c.date && cardDate && c.date !== cardDate ? 5000 : 0;
+      const stagePenalty = cardStage && c.stageCode && cardStage !== c.stageCode ? 3000 : 0;
+      return { c, swap: seed.swap, seed, score: seed.penalty + timeDistance + sameDatePenalty + stagePenalty };
+    })
+    .sort((a, b) => a.score - b.score || b.seed.matched - a.seed.matched || a.c.index - b.c.index);
+
+  const best = scored[0];
+  if (!best) return null;
+
+  // Si los grupos del seed coinciden, manda sobre la hora. Esto corrige 1ºH España vs 2ºJ Austria.
+  if (best.seed.matched > 0 && best.seed.mismatched === 0) {
+    return cloneCandidateForCard(best.c, best.swap);
+  }
+
+  if (best.score <= 180) return cloneCandidateForCard(best.c, best.swap);
+
+  const sameDate = scored.find(x => x.c.date === cardDate && (!cardStage || !x.c.stageCode || x.c.stageCode === cardStage));
+  return sameDate ? cloneCandidateForCard(sameDate.c, sameDate.swap) : null;
+}
+
+function updateKnockoutCardFromCandidate(card, item) {
+  if (!card.dataset.seedTeam1) card.dataset.seedTeam1 = card.dataset.team1 || '';
+  if (!card.dataset.seedTeam2) card.dataset.seedTeam2 = card.dataset.team2 || '';
+
+  const team1 = item.h;
+  const team2 = item.a;
+  if (!team1 || !team2) return false;
+
+  card.dataset.team1 = team1;
+  card.dataset.team2 = team2;
+  updateTeamElement(card, 0, team1);
+  updateTeamElement(card, 1, team2);
+  setCardChannelForKnockout(card, team1, team2);
+
+  // No cambiamos data-date ni la hora visible de la tarjeta: el calendario HTML es la fuente
+  // para la programación en hora Madrid.
+  if (item.stage && !card.dataset.stage) card.dataset.stage = item.stage;
+
+  const hasHome = item.hs !== undefined && item.hs !== null && String(item.hs).trim() !== '' && String(item.hs).trim() !== 'null';
+  const hasAway = item.as !== undefined && item.as !== null && String(item.as).trim() !== '' && String(item.as).trim() !== 'null';
+  if (hasHome && hasAway && (item.st === 'live' || item.st === 'finished')) {
+    const score = card.querySelector('.scoreline');
+    if (score) {
+      card.classList.add('has-score');
+      card.classList.toggle('live-match', item.st === 'live');
+      card.classList.toggle('finished-match', item.st === 'finished');
+      score.textContent = `${Number(item.hs)} - ${Number(item.as)}${item.st === 'live' && safeDisplayMinute(item.min) ? ` · ${safeDisplayMinute(item.min)}'` : ''}`;
+    }
+  }
+  return true;
 }
 </script>
 
