@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.1</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1266,7 +1266,7 @@ to { transform: rotate(360deg); }
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v23 · 28/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v23.1 · 28/06/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -4605,23 +4605,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 <script>
-/* v23: eliminatorias dinámicas desde JSON del Worker */
+/* v23.1: eliminatorias dinámicas desde JSON del Worker + fecha local MM/DD/YYYY */
 const KNOCKOUT_START_DATE = '2026-06-28';
-const KNOCKOUT_STAGE_KEYWORDS = ['dieciseisavos','octavos','cuartos','semifinal','final','tercer','third','round of 32','round of 16','quarter','semi'];
+const KNOCKOUT_STAGE_KEYWORDS = ['dieciseisavos','octavos','cuartos','semifinal','final','tercer','third','round of 32','round of 16','quarter','semi','r32','r16','qf','sf'];
 
 function isKnownNationalTeam(name) {
   const local = apiNameToLocal(name || '');
   return Object.values(GROUP_TEAMS || {}).some(list => list.includes(local));
 }
 
-function normalizeApiDateValue(value) {
+function normalizeApiDateValue(value, rawMatch = null) {
   if (!value) return '';
   const raw = String(value).trim();
+
+  // ISO / yyyy-mm-dd
   const iso = raw.match(/(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})/);
   if (iso) return `${iso[1]}-${String(iso[2]).padStart(2,'0')}-${String(iso[3]).padStart(2,'0')}`;
 
-  const euro = raw.match(/(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})/);
-  if (euro) return `${euro[3]}-${String(euro[2]).padStart(2,'0')}-${String(euro[1]).padStart(2,'0')}`;
+  // worldcup26.ir devuelve local_date como MM/DD/YYYY HH:mm, por ejemplo 07/03/2026 18:00.
+  // Antes se estaba interpretando como DD/MM/YYYY, por eso las eliminatorias no coincidían.
+  const slash = raw.match(/(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})/);
+  if (slash) {
+    const a = Number(slash[1]);
+    const b = Number(slash[2]);
+    const y = slash[3];
+
+    let month = a;
+    let day = b;
+
+    // Si uno de los dos es >12, resolvemos automáticamente.
+    if (a > 12 && b <= 12) {
+      day = a;
+      month = b;
+    } else if (b > 12 && a <= 12) {
+      month = a;
+      day = b;
+    } else if (rawMatch && raw === String(rawMatch.local_date || '').trim()) {
+      // Para local_date del Worker usamos MM/DD/YYYY.
+      month = a;
+      day = b;
+    }
+
+    return `${y}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  }
 
   const d = new Date(raw);
   if (!Number.isNaN(d.getTime())) {
@@ -4656,10 +4682,11 @@ function cardKickoffMinutes(card) {
 
 function extendedNorm(raw, index = 0) {
   const m = norm(raw);
-  const date = normalizeApiDateValue(pick(
+  const rawDateValue = pick(
     raw.date, raw.match_date, raw.game_date, raw.local_date, raw.utcDate, raw.datetime,
     raw.start_time, raw.kickoff, raw.fixture?.date, raw.fixture?.timestamp
-  ));
+  );
+  const date = normalizeApiDateValue(rawDateValue, raw);
   const time = normalizeApiTimeValue(pick(
     raw.time, raw.match_time, raw.local_time, raw.kickoff_time, raw.start_time,
     raw.datetime, raw.fixture?.date
