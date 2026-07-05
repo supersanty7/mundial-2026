@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v23.4</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v24.2</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1266,7 +1266,7 @@ to { transform: rotate(360deg); }
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v23.4 · 28/06/2026</div>
+    <div class="deploy-version" id="deployVersion">v24.2 · 05/07/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -5988,6 +5988,463 @@ window.addEventListener('resize', () => {
     // Espera a que se apliquen layout responsive y resultados cacheados iniciales.
     setTimeout(() => window.scrollToNextKickoffMatch({ instant: false }), 700);
   });
+})();
+</script>
+
+
+
+<script>
+/* v24: eliminatorias 100% dinámicas desde el JSON del Worker.
+   - La fase de grupos conserva el calendario HTML fijo y solo actualiza resultados.
+   - Las eliminatorias se eliminan y se reconstruyen desde el JSON cada vez que llegan datos.
+   - La hora se toma del JSON y se convierte a hora Madrid.
+   - Corrección v24.2: horarios canónicos por id de eliminatoria
+     de calendario y se suma +6h de forma determinista para Madrid; no se usa
+     Intl/timezone sobre ese campo para evitar desplazamientos 20:00/23:00.
+   - No se usan tablas canónicas ni se recolocan partidos por seed: manda el JSON. */
+(function() {
+  const MADRID_TZ = 'Europe/Madrid';
+  const KNOCKOUT_START = '2026-06-28';
+  const KNOCKOUT_STAGE_MAP = {
+    r32: { label: 'Dieciseisavos', cls: 'phase-r32', order: 1 },
+    r16: { label: 'Octavos', cls: 'phase-r16', order: 2 },
+    qf: { label: 'Cuartos', cls: 'phase-qf', order: 3 },
+    sf: { label: 'Semifinales', cls: 'phase-sf', order: 4 },
+    third: { label: 'Tercer puesto', cls: 'phase-third', order: 5 },
+    final: { label: 'Final', cls: 'phase-final', order: 6 }
+  };
+
+  function pad2(v) { return String(v).padStart(2, '0'); }
+
+  function madridWallDate(year, month, day, hour = 0, minute = 0) {
+    // Date “falso UTC”: sus componentes UTC representan directamente hora Madrid.
+    // Así evitamos que el navegador aplique dobles conversiones de zona horaria.
+    return new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  }
+
+  function madridPartsFromDate(date) {
+    // En v24.2 todos los kickoffs dinámicos se normalizan como Date cuyo UTC
+    // equivale a la hora de pared de Madrid. Por eso leemos UTC directamente.
+    return {
+      year: String(date.getUTCFullYear()),
+      month: pad2(date.getUTCMonth() + 1),
+      day: pad2(date.getUTCDate()),
+      hour: pad2(date.getUTCHours()),
+      minute: pad2(date.getUTCMinutes())
+    };
+  }
+
+  function realInstantToMadridWallDate(date) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: MADRID_TZ,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(date);
+    const get = type => parts.find(p => p.type === type)?.value || '';
+    return madridWallDate(Number(get('year')), Number(get('month')), Number(get('day')), Number(get('hour')), Number(get('minute')));
+  }
+
+  function madridDateText(date) {
+    const p = madridPartsFromDate(date);
+    return `${p.year}-${p.month}-${p.day}`;
+  }
+
+  function madridTimeText(date) {
+    const p = madridPartsFromDate(date);
+    return `${p.hour}:${p.minute}`;
+  }
+
+  function madridIsoText(date) {
+    const p = madridPartsFromDate(date);
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00+02:00`;
+  }
+
+  function parseWorkerKickoff(raw) {
+    if (!raw) return null;
+    const value = String(raw).trim();
+    if (!value) return null;
+
+    // ISO con zona horaria real: convertimos el instante a hora de pared Madrid.
+    if (/^20\d{2}-\d{1,2}-\d{1,2}T/.test(value)) {
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? null : realInstantToMadridWallDate(d);
+    }
+
+    // YYYY-MM-DD HH:mm sin zona. Lo tratamos como hora Madrid si aparece así.
+    let m = value.match(/^(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})[ T](\d{1,2}):(\d{2})/);
+    if (m) {
+      const [, y, mo, da, h, mi] = m;
+      return madridWallDate(Number(y), Number(mo), Number(da), Number(h), Number(mi));
+    }
+
+    // worldcup26.ir: MM/DD/YYYY HH:mm en hora USA Este. En junio/julio 2026,
+    // Madrid = USA Este + 6h. Sumamos sobre fecha/hora de calendario para que:
+    // 07/06/2026 15:00 -> 06/07/2026 21:00 Madrid
+    // 07/06/2026 20:00 -> 07/07/2026 02:00 Madrid
+    m = value.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})(?:[ T](\d{1,2}):(\d{2}))?/);
+    if (m) {
+      const month = Number(m[1]);
+      const day = Number(m[2]);
+      const year = Number(m[3]);
+      const hour = Number(m[4] || 0);
+      const minute = Number(m[5] || 0);
+      return madridWallDate(year, month, day, hour + 6, minute);
+    }
+
+    const fallback = new Date(value);
+    return Number.isNaN(fallback.getTime()) ? null : realInstantToMadridWallDate(fallback);
+  }
+
+  function rawField(raw, keys) {
+    for (const key of keys) {
+      const val = key.split('.').reduce((acc, part) => acc && acc[part], raw);
+      if (val !== undefined && val !== null && val !== '') return val;
+    }
+    return '';
+  }
+
+
+  function canonicalKnockoutKickoffMadrid(raw) {
+    // v24.2: worldcup26.ir trae bien equipos/resultados, pero algunos horarios
+    // de eliminatorias llegan desactualizados. Para evitar desplazar partidos
+    // como Portugal-España o Estados Unidos-Bélgica, usamos horario canónico
+    // por id de partido de eliminatoria. Equipos y marcador siguen viniendo del JSON.
+    const id = String(rawField(raw, ['id','match_id','fixture_id','fixture.id']) || '').trim();
+    const map = {
+      // Dieciseisavos / Round of 32
+      '73': '2026-06-28T21:00:00+02:00',
+      '76': '2026-06-29T19:00:00+02:00',
+      '74': '2026-06-29T22:30:00+02:00',
+      '75': '2026-06-30T03:00:00+02:00',
+      '78': '2026-06-30T19:00:00+02:00',
+      '77': '2026-06-30T23:00:00+02:00',
+      '79': '2026-07-01T04:00:00+02:00',
+      '80': '2026-07-01T18:00:00+02:00',
+      '82': '2026-07-01T22:00:00+02:00',
+      '81': '2026-07-02T02:00:00+02:00',
+      '84': '2026-07-02T21:00:00+02:00',
+      '83': '2026-07-03T01:00:00+02:00',
+      '85': '2026-07-03T05:00:00+02:00',
+      '86': '2026-07-03T20:00:00+02:00',
+      '88': '2026-07-04T00:00:00+02:00',
+      '87': '2026-07-04T03:30:00+02:00',
+
+      // Octavos / Round of 16
+      '90': '2026-07-04T19:00:00+02:00',
+      '89': '2026-07-04T23:00:00+02:00',
+      '91': '2026-07-05T22:00:00+02:00',
+      '92': '2026-07-06T02:00:00+02:00',
+      '93': '2026-07-06T21:00:00+02:00',
+      '94': '2026-07-07T02:00:00+02:00',
+      '95': '2026-07-07T18:00:00+02:00',
+      '96': '2026-07-07T22:00:00+02:00',
+
+      // Cuartos, semifinales y final
+      '97': '2026-07-09T22:00:00+02:00',
+      '98': '2026-07-10T21:00:00+02:00',
+      '99': '2026-07-11T23:00:00+02:00',
+      '100': '2026-07-12T03:00:00+02:00',
+      '101': '2026-07-14T21:00:00+02:00',
+      '102': '2026-07-15T21:00:00+02:00',
+      '103': '2026-07-18T23:00:00+02:00',
+      '104': '2026-07-19T21:00:00+02:00'
+    };
+    const iso = map[id];
+    if (!iso) return null;
+    const m = iso.match(/^(20\d{2})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (!m) return null;
+    return madridWallDate(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5]));
+  }
+
+  function stageCodeFromRaw(raw) {
+    const text = String(rawField(raw, [
+      'type', 'stage', 'round', 'phase', 'group', 'league.round', 'fixture.status.long'
+    ]) || '').toLowerCase();
+
+    if (/r32|round of 32|dieciseis|32/.test(text)) return 'r32';
+    if (/r16|round of 16|octav|16/.test(text)) return 'r16';
+    if (/qf|quarter|cuarto/.test(text)) return 'qf';
+    if (/sf|semi/.test(text)) return 'sf';
+    if (/third|3rd|tercer/.test(text)) return 'third';
+    if (/final/.test(text)) return 'final';
+    return '';
+  }
+
+  function isPlaceholderTeam(name) {
+    const c = typeof clean === 'function' ? clean(name) : String(name || '').toLowerCase();
+    return !c || /tbd|winner|loser|ganador|perdedor|pendiente|grupo/.test(c);
+  }
+
+  function isKnockoutRaw(raw) {
+    const dateValue = rawField(raw, ['local_date', 'date', 'match_date', 'kickoff', 'fixture.date']);
+    const kickoff = parseWorkerKickoff(dateValue);
+    const madridDate = kickoff ? madridDateText(kickoff) : '';
+    const stageCode = stageCodeFromRaw(raw);
+    return !!stageCode || (madridDate && madridDate >= KNOCKOUT_START);
+  }
+
+  function localTeamName(name) {
+    const mapped = typeof apiNameToLocal === 'function' ? apiNameToLocal(name || '') : (name || '');
+    return mapped || 'Equipo pendiente';
+  }
+
+  function rawToKnockoutItem(raw, index) {
+    const normalized = typeof norm === 'function' ? norm(raw) : {};
+    const h = localTeamName(normalized.h || rawField(raw, ['home_team_name_en','home_team','homeTeam','home','teams.home.name']));
+    const a = localTeamName(normalized.a || rawField(raw, ['away_team_name_en','away_team','awayTeam','away','teams.away.name']));
+    const dateValue = rawField(raw, ['local_date', 'date', 'match_date', 'kickoff', 'fixture.date']);
+    const kickoff = canonicalKnockoutKickoffMadrid(raw) || parseWorkerKickoff(dateValue);
+    if (!kickoff || Number.isNaN(kickoff.getTime())) return null;
+
+    let stageCode = stageCodeFromRaw(raw);
+    if (!stageCode) {
+      const md = madridDateText(kickoff);
+      if (md <= '2026-07-03') stageCode = 'r32';
+      else if (md <= '2026-07-07') stageCode = 'r16';
+      else if (md <= '2026-07-11') stageCode = 'qf';
+      else if (md <= '2026-07-15') stageCode = 'sf';
+      else if (md === '2026-07-18') stageCode = 'third';
+      else stageCode = 'final';
+    }
+
+    const stage = KNOCKOUT_STAGE_MAP[stageCode] || KNOCKOUT_STAGE_MAP.r32;
+    return {
+      raw, index, h, a,
+      homePlaceholder: isPlaceholderTeam(h),
+      awayPlaceholder: isPlaceholderTeam(a),
+      hs: normalized.hs,
+      as: normalized.as,
+      st: normalized.st,
+      min: normalized.min,
+      stageCode,
+      stageLabel: stage.label,
+      stageClass: stage.cls,
+      stageOrder: stage.order,
+      kickoff,
+      date: madridDateText(kickoff),
+      time: madridTimeText(kickoff),
+      iso: madridIsoText(kickoff),
+      id: rawField(raw, ['id','match_id','fixture_id','fixture.id']) || `${stageCode}-${index}`
+    };
+  }
+
+  function getKnockoutItems(apiMatches) {
+    return (Array.isArray(apiMatches) ? apiMatches : [])
+      .map((raw, index) => ({ raw, index }))
+      .filter(x => isKnockoutRaw(x.raw))
+      .map(x => rawToKnockoutItem(x.raw, x.index))
+      .filter(Boolean)
+      .sort((a, b) => a.kickoff - b.kickoff || a.stageOrder - b.stageOrder || a.index - b.index);
+  }
+
+  function channelForItem(item) {
+    return [item.h, item.a].includes('España') ? 'RTVE / DAZN' : 'DAZN';
+  }
+
+  function channelClass(item) {
+    return channelForItem(item).includes('RTVE') ? 'channel rtve' : 'channel';
+  }
+
+  function flagForTeam(team) {
+    if (typeof TEAM_EMOJI !== 'undefined' && TEAM_EMOJI[team]) return TEAM_EMOJI[team];
+    return isPlaceholderTeam(team) ? '🏳️' : '🏳️';
+  }
+
+  function resultKeyForItem(item) {
+    return `${item.date}|${item.h}|${item.a}|${item.stageCode}|${item.id}`;
+  }
+
+  function phaseClassForItem(item) {
+    return `knockout-pending ${item.stageClass || ''}`.trim();
+  }
+
+  function scoreTextForItem(item) {
+    const hasHome = item.hs !== undefined && item.hs !== null && String(item.hs).trim() !== '' && String(item.hs).trim() !== 'null';
+    const hasAway = item.as !== undefined && item.as !== null && String(item.as).trim() !== '' && String(item.as).trim() !== 'null';
+    if (!hasHome || !hasAway || !['live', 'finished'].includes(item.st)) return '';
+    const minute = item.st === 'live' && typeof safeDisplayMinute === 'function' ? safeDisplayMinute(item.min) : '';
+    return `${Number(item.hs)} - ${Number(item.as)}${minute ? ` · ${minute}'` : ''}`;
+  }
+
+  function matchArticleHtml(item) {
+    const scoreText = scoreTextForItem(item);
+    const scoreClass = scoreText ? ` has-score ${item.st === 'live' ? 'live-match' : 'finished-match'}` : '';
+    const channel = channelForItem(item);
+    const spain = [item.h, item.a].includes('España') ? '1' : '0';
+    const key = resultKeyForItem(item);
+
+    return `
+      <article class="match ${phaseClassForItem(item)}${scoreClass}" data-dynamic-knockout="1" data-date="${item.date}" data-team1="${item.h}" data-team2="${item.a}" data-channel="${channel}" data-spain="${spain}" data-kickoff="${item.iso}" data-result-key="${key}" data-stage="${item.stageLabel}">
+        <div class="match-time">${item.time} <span class="group mobile-hidden">${item.stageLabel}</span></div>
+        <div class="teams">
+          <span class="team"><span class="flag" aria-label="Bandera ${item.h}" role="img">${flagForTeam(item.h)}</span> <b>${item.h}</b></span>
+          <span class="vs">vs</span>
+          <span class="team"><span class="flag" aria-label="Bandera ${item.a}" role="img">${flagForTeam(item.a)}</span> <b>${item.a}</b></span>
+        </div>
+        <div class="scoreline" aria-live="polite">${scoreText}</div>
+        <div class="${channelClass(item)}">${channel}</div>
+      </article>
+    `;
+  }
+
+  function weekdayShort(dateText) {
+    const [y, m, d] = dateText.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    const labels = ['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB'];
+    return labels[date.getUTCDay()] || '';
+  }
+
+  function labelDate(dateText) {
+    const [y, m, d] = dateText.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  function stageLabelForDay(items) {
+    const first = items[0];
+    return first?.stageLabel || 'Eliminatorias';
+  }
+
+  function clearStaticKnockoutCards() {
+    document.querySelectorAll('.mobile-day.knockout-day').forEach(el => el.remove());
+    document.querySelectorAll('.calendar-wrap .match.knockout-pending, .calendar-wrap .match[data-dynamic-knockout="1"]').forEach(el => el.remove());
+    document.querySelectorAll('.mobile-list .match[data-dynamic-knockout="1"]').forEach(el => el.closest('.mobile-day')?.remove());
+  }
+
+  function renderDynamicMobileKnockouts(items) {
+    const list = document.querySelector('.mobile-list');
+    if (!list) return;
+    const byDate = new Map();
+    items.forEach(item => {
+      if (!byDate.has(item.date)) byDate.set(item.date, []);
+      byDate.get(item.date).push(item);
+    });
+
+    for (const [date, dayItems] of byDate.entries()) {
+      dayItems.sort((a, b) => a.kickoff - b.kickoff);
+      const day = date.split('-')[2];
+      const section = document.createElement('section');
+      section.className = 'mobile-day has-matches knockout-day';
+      section.dataset.dateSection = date;
+      section.innerHTML = `
+        <div class="mobile-day-header">
+          <span class="mobile-date">${Number(day)}</span>
+          <span class="mobile-weekday">${weekdayShort(date)}</span>
+        </div>
+        <div class="mobile-matches">
+          <div class="knockout-day-label">${labelDate(date)} · ${stageLabelForDay(dayItems)}</div>
+          ${dayItems.map(matchArticleHtml).join('')}
+        </div>
+      `;
+      list.appendChild(section);
+    }
+  }
+
+  function renderDynamicDesktopKnockouts(items) {
+    items.forEach(item => {
+      const cell = document.querySelector(`.calendar-wrap [data-date-section="${CSS.escape(item.date)}"] .matches`);
+      if (!cell) return;
+      const dayCell = cell.closest('[data-date-section]');
+      if (dayCell) dayCell.classList.add('has-matches', 'knockout-day');
+      cell.insertAdjacentHTML('beforeend', matchArticleHtml(item));
+    });
+  }
+
+  function bindDynamicMatchDetails() {
+    document.querySelectorAll('.match[data-dynamic-knockout="1"]').forEach(card => {
+      if (card.dataset.detailBound === '1') return;
+      card.dataset.detailBound = '1';
+      card.addEventListener('click', () => {
+        if (typeof openMatchDetail === 'function') openMatchDetail(card);
+      });
+    });
+  }
+
+  function refreshDateFilterOptions() {
+    const select = document.getElementById('dateFilter');
+    if (!select) return;
+    const existing = new Set(Array.from(select.options).map(o => o.value));
+    const dates = Array.from(document.querySelectorAll('.match[data-date]'))
+      .map(el => el.dataset.date)
+      .filter(Boolean)
+      .sort();
+    dates.forEach(date => {
+      if (existing.has(date)) return;
+      const [y, m, d] = date.split('-');
+      const opt = document.createElement('option');
+      opt.value = date;
+      opt.textContent = `${d}/${m}/${y}`;
+      select.appendChild(opt);
+      existing.add(date);
+    });
+  }
+
+  function knockoutSummaryHtml(item, idx) {
+    const ready = !item.homePlaceholder && !item.awayPlaceholder;
+    const score = scoreTextForItem(item);
+    return `
+      <article class="knockout-match">
+        <div class="knockout-code">${item.stageCode.toUpperCase()}-${idx + 1}</div>
+        <div>
+          <div class="knockout-teams ${ready ? '' : 'empty'}">
+            ${flagForTeam(item.h)} ${item.h} vs ${flagForTeam(item.a)} ${item.a}
+            ${score ? `<strong style="margin-left:6px">${score}</strong>` : `<span class="knockout-score-empty" aria-label="resultado pendiente"></span>`}
+          </div>
+          <div class="knockout-meta pending">${labelDate(item.date)} · ${item.time} · ${item.stageLabel}</div>
+        </div>
+      </article>
+    `;
+  }
+
+  window.renderKnockouts = function() {
+    const box = document.getElementById('knockoutView');
+    if (!box) return;
+    const items = window.__dynamicKnockoutItems || [];
+    if (!items.length) {
+      box.innerHTML = '<section class="knockout-round"><div class="knockout-title">Eliminatorias</div><div class="knockout-list"><div class="knockout-meta pending">Pendiente de datos del Worker</div></div></section>';
+      return;
+    }
+
+    const byStage = new Map();
+    items.forEach(item => {
+      if (!byStage.has(item.stageCode)) byStage.set(item.stageCode, []);
+      byStage.get(item.stageCode).push(item);
+    });
+
+    box.innerHTML = Array.from(byStage.entries())
+      .sort((a, b) => (KNOCKOUT_STAGE_MAP[a[0]]?.order || 99) - (KNOCKOUT_STAGE_MAP[b[0]]?.order || 99))
+      .map(([stageCode, stageItems]) => {
+        stageItems.sort((a, b) => a.kickoff - b.kickoff);
+        const title = KNOCKOUT_STAGE_MAP[stageCode]?.label || 'Eliminatorias';
+        return `
+          <section class="knockout-round">
+            <div class="knockout-title">${title}</div>
+            <div class="knockout-list">
+              ${stageItems.map(knockoutSummaryHtml).join('')}
+            </div>
+          </section>
+        `;
+      }).join('');
+  };
+
+  window.applyKnockoutDataFromApi = function(apiMatches) {
+    const items = getKnockoutItems(apiMatches);
+    window.__dynamicKnockoutItems = items;
+
+    clearStaticKnockoutCards();
+    renderDynamicDesktopKnockouts(items);
+    renderDynamicMobileKnockouts(items);
+    bindDynamicMatchDetails();
+    refreshDateFilterOptions();
+
+    if (typeof applyFilters === 'function') applyFilters();
+    if (typeof window.renderKnockouts === 'function') window.renderKnockouts();
+    if (typeof window.scrollToNextKickoffMatch === 'function') {
+      setTimeout(() => window.scrollToNextKickoffMatch({ force: true, instant: true }), 100);
+    }
+
+    console.info(`[Mundial 2026] v24.2 eliminatorias renderizadas dinámicamente desde JSON: ${items.length}`);
+    return items.length;
+  };
 })();
 </script>
 
