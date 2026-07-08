@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calendario Mundial FIFA 2026 · Hora Madrid · v24.4</title>
+<title>Calendario Mundial FIFA 2026 · Hora Madrid · v24.5</title>
 <style>
 :root {
   --bg:#07111f; --panel:#fff; --text:#0b1f3a; --muted:#64748b; --line:#d8e0ec;
@@ -1232,6 +1232,23 @@ to { transform: rotate(360deg); }
   box-shadow: 0 0 0 5px rgba(11, 95, 255, .12), 0 12px 28px rgba(15, 23, 42, .16);
 }
 
+
+
+/* v24.5: detalle de goleadores y tanda de penaltis */
+.penalty-section .detail-section-title { background:#fff7ed; color:#9a3412; }
+.penalty-summary { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; font-weight:850; }
+.penalty-summary strong { font-size:18px; color:#0f172a; }
+.penalty-summary span { color:#475569; }
+.penalty-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.penalty-team-card { background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:10px; }
+.penalty-team-title { font-weight:950; color:#0f172a; margin-bottom:8px; }
+.penalty-subtitle { margin:8px 0 5px; font-size:11px; font-weight:950; color:#64748b; text-transform:uppercase; letter-spacing:.04em; }
+.penalty-list { display:flex; flex-direction:column; gap:5px; }
+.penalty-row { display:flex; align-items:center; gap:7px; font-weight:800; }
+.penalty-row.scored .penalty-icon { color:#16a34a; }
+.penalty-row.missed .penalty-icon { color:#dc2626; }
+@media(max-width:760px){.penalty-grid{grid-template-columns:1fr}.penalty-summary strong{font-size:16px}}
+
 </style>
 
 
@@ -1266,7 +1283,7 @@ to { transform: rotate(360deg); }
   <header>
     <h1>Mundial FIFA 2026</h1>
     <div class="subtitle">Horarios en Madrid (CEST)</div>
-    <div class="deploy-version" id="deployVersion">v24.4 · 07/07/2026</div>
+    <div class="deploy-version" id="deployVersion">v24.5 · 08/07/2026</div>
   </header>
 
   <section class="filters" aria-label="Filtros">
@@ -4166,7 +4183,7 @@ function indexApiMatches(apiMatches) {
   apiMatches.forEach(raw => {
     const m = norm(raw);
     if (!m.h || !m.a) return;
-    map.set(pairKey(m.h, m.a), m);
+    map.set(pairKey(m.h, m.a), { ...m, raw });
   });
   return map;
 }
@@ -4194,7 +4211,8 @@ function applyIndexedResults(resultMap, sourceLabel = '') {
       s1 === 'null' || s2 === 'null'
     ) return;
 
-    setScore(card.dataset.resultKey, `${s1} - ${s2}`, m.st, safeDisplayMinute(m.min));
+    const penaltyText = getPenaltyDisplayText(m.raw, !direct);
+    setScore(card.dataset.resultKey, `${s1} - ${s2}${penaltyText ? ' · ' + penaltyText : ''}`, m.st, safeDisplayMinute(m.min));
     updated++;
   });
 
@@ -5478,6 +5496,86 @@ function renderScorers(title, scorers) {
 }
 
 
+/* v24.5: penaltis y goleadores en detalle */
+function parsePenaltyList(value) {
+  return parseScorers(value);
+}
+
+function hasPenaltyData(raw) {
+  if (!raw) return false;
+  const hp = String(raw.home_penalty_score ?? '').trim();
+  const ap = String(raw.away_penalty_score ?? '').trim();
+  return hp !== '' && ap !== '' && hp !== 'null' && ap !== 'null';
+}
+
+function getPenaltyScoresForDisplay(raw, reversed = false) {
+  if (!hasPenaltyData(raw)) return null;
+  const home = String(raw.home_penalty_score ?? '').trim();
+  const away = String(raw.away_penalty_score ?? '').trim();
+  return reversed ? { first: away, second: home } : { first: home, second: away };
+}
+
+function getPenaltyDisplayText(raw, reversed = false) {
+  const p = getPenaltyScoresForDisplay(raw, reversed);
+  if (!p) return '';
+  return `Pen ${p.first}-${p.second}`;
+}
+
+function getPenaltyWinnerLabel(raw, firstTeam, secondTeam, reversed = false) {
+  const p = getPenaltyScoresForDisplay(raw, reversed);
+  if (!p) return '';
+  const first = Number(p.first);
+  const second = Number(p.second);
+  if (!Number.isFinite(first) || !Number.isFinite(second) || first === second) return '';
+  return first > second ? firstTeam : secondTeam;
+}
+
+function renderPenaltyColumn(title, scorers, misses) {
+  const scoredHtml = scorers.length
+    ? scorers.map(s => `<div class="penalty-row scored"><span class="penalty-icon">✅</span><span>${s}</span></div>`).join('')
+    : '<div class="detail-empty">Sin penaltis anotados.</div>';
+  const missedHtml = misses.length
+    ? misses.map(s => `<div class="penalty-row missed"><span class="penalty-icon">❌</span><span>${s}</span></div>`).join('')
+    : '<div class="detail-empty">Sin fallos registrados.</div>';
+  return `
+    <div class="penalty-team-card">
+      <div class="penalty-team-title">${title}</div>
+      <div class="penalty-subtitle">Anotados</div>
+      <div class="penalty-list">${scoredHtml}</div>
+      <div class="penalty-subtitle">Fallados</div>
+      <div class="penalty-list">${missedHtml}</div>
+    </div>
+  `;
+}
+
+function renderPenaltyShootoutSection(raw, team1, team2, reversed = false) {
+  if (!hasPenaltyData(raw)) return '';
+  const score = getPenaltyScoresForDisplay(raw, reversed);
+  const winner = getPenaltyWinnerLabel(raw, team1, team2, reversed);
+
+  const firstScorers = reversed ? parsePenaltyList(raw.away_penalty_scorers) : parsePenaltyList(raw.home_penalty_scorers);
+  const secondScorers = reversed ? parsePenaltyList(raw.home_penalty_scorers) : parsePenaltyList(raw.away_penalty_scorers);
+  const firstMisses = reversed ? parsePenaltyList(raw.away_penalty_misses) : parsePenaltyList(raw.home_penalty_misses);
+  const secondMisses = reversed ? parsePenaltyList(raw.home_penalty_misses) : parsePenaltyList(raw.away_penalty_misses);
+
+  return `
+    <section class="detail-section penalty-section">
+      <div class="detail-section-title">Tanda de penaltis</div>
+      <div class="detail-section-content">
+        <div class="penalty-summary">
+          <strong>${team1} ${score.first} - ${score.second} ${team2}</strong>
+          ${winner ? `<span>Ganador por penaltis: <b>${winner}</b></span>` : ''}
+        </div>
+        <div class="penalty-grid">
+          ${renderPenaltyColumn(team1, firstScorers, firstMisses)}
+          ${renderPenaltyColumn(team2, secondScorers, secondMisses)}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+
 /* v21: escudos de selecciones en el detalle */
 const TEAM_LOGO_CACHE_KEY='mundial2026_team_logos_v1';
 function getTeamLogoCache(){try{return JSON.parse(localStorage.getItem(TEAM_LOGO_CACHE_KEY)||'{}')}catch{return {}}}
@@ -5574,7 +5672,8 @@ function getApiMatchScoreText(apiMatch, card = null) {
   const hasAway = away !== undefined && away !== null && String(away).trim() !== '';
 
   if (hasHome && hasAway) {
-    return `${Number(home)} - ${Number(away)}`;
+    const penaltyText = getPenaltyDisplayText(apiMatch?.raw, !!apiMatch?.rev);
+    return `${Number(home)} - ${Number(away)}${penaltyText ? ` (${penaltyText})` : ''}`;
   }
 
   return cleanScoreText(card?.querySelector?.('.scoreline')?.textContent?.trim() || 'vs');
@@ -5677,6 +5776,9 @@ function openMatchDetail(card) {
   scoreBox.textContent = scoreVisible || 'Pendiente';
 
   const rawMatch = apiMatch?.raw || {};
+  const homeScorers = apiMatch ? parseScorers(apiMatch.rev ? rawMatch.away_scorers : rawMatch.home_scorers) : [];
+  const awayScorers = apiMatch ? parseScorers(apiMatch.rev ? rawMatch.home_scorers : rawMatch.away_scorers) : [];
+  const penaltiesHtml = apiMatch ? renderPenaltyShootoutSection(rawMatch, team1, team2, !!apiMatch.rev) : '';
 
   const stadiumId = rawMatch.stadium_id || apiMatch?.stadium_id || '';
   const stadium = stadiumId ? (STADIUMS_BY_ID[String(stadiumId)] || `Estadio ID ${stadiumId}`) : 'Pendiente';
@@ -5684,6 +5786,9 @@ function openMatchDetail(card) {
   const state = normalized.infoLabel;
 
   body.innerHTML = `
+    ${renderScorers(`Goles · ${team1Flag} ${team1}`.trim(), homeScorers)}
+    ${renderScorers(`Goles · ${team2Flag} ${team2}`.trim(), awayScorers)}
+    ${penaltiesHtml}
     <section class="detail-section">
       <div class="detail-section-title">Información</div>
       <div class="detail-section-content">
@@ -6263,7 +6368,8 @@ window.addEventListener('resize', () => {
     const hasAway = item.as !== undefined && item.as !== null && String(item.as).trim() !== '' && String(item.as).trim() !== 'null';
     if (!hasHome || !hasAway || !['live', 'finished'].includes(item.st)) return '';
     const minute = item.st === 'live' && typeof safeDisplayMinute === 'function' ? safeDisplayMinute(item.min) : '';
-    return `${Number(item.hs)} - ${Number(item.as)}${minute ? ` · ${minute}'` : ''}`;
+    const penaltyText = typeof getPenaltyDisplayText === 'function' ? getPenaltyDisplayText(item.raw, false) : '';
+    return `${Number(item.hs)} - ${Number(item.as)}${penaltyText ? ` · ${penaltyText}` : ''}${minute ? ` · ${minute}'` : ''}`;
   }
 
   function matchArticleHtml(item) {
